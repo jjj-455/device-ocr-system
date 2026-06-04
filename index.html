@@ -1249,7 +1249,9 @@
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeImageViewer(); });
 
   // ===== OCR 配置 =====
-  // 部署后改为实际的 Render 服务地址
+  // 【重要】部署后端后，把下面的地址替换为你的实际后端地址
+  // CloudBase 云托管:  https://你的服务名-你的环境id.ap-guangzhou.app.tcloudbase.com
+  // 本机测试:          http://localhost:8000
   const OCR_API_URL = 'http://localhost:8000';
   const DEVICE_TYPE = 'chiller';
 
