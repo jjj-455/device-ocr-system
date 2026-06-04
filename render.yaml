@@ -1,0 +1,15 @@
+services:
+  # Python OCR API 后端
+  - type: web
+    name: device-ocr-api
+    runtime: python
+    region: singapore
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHONUNBUFFERED
+        value: "1"
+    healthCheckPath: /
+    autoDeploy: true

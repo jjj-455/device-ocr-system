@@ -1,0 +1,1480 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>冷却系统监测仪表盘</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, 'Segoe UI', system-ui, sans-serif;
+    background: linear-gradient(135deg, #1a2332 0%, #2c3e50 100%);
+    min-height: 100vh;
+    padding: 20px;
+    display: flex;
+    justify-content: center;
+  }
+  .container { width: 100%; max-width: 720px; }
+  .header {
+    text-align: center;
+    color: #fff;
+    padding: 24px 0 20px;
+  }
+  .header h1 { font-size: 22px; font-weight: 700; letter-spacing: 1px; }
+  .header .sub { font-size: 13px; opacity: 0.6; margin-top: 4px; }
+  .header .time { font-size: 12px; opacity: 0.4; margin-top: 2px; }
+  .card {
+    background: rgba(255,255,255,0.06);
+    backdrop-filter: blur(12px);
+    border-radius: 16px;
+    padding: 20px;
+    margin-bottom: 16px;
+    border: 1px solid rgba(255,255,255,0.08);
+  }
+  .card-title {
+    font-size: 13px;
+    color: rgba(255,255,255,0.5);
+    margin-bottom: 14px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .params-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .param-card {
+    background: rgba(255,255,255,0.05);
+    border-radius: 12px;
+    padding: 14px 16px;
+    border: 1px solid rgba(255,255,255,0.06);
+    transition: border-color 0.3s;
+  }
+  .param-card:hover { border-color: rgba(102,126,234,0.3); }
+  .param-label {
+    font-size: 12px;
+    color: rgba(255,255,255,0.45);
+    margin-bottom: 6px;
+  }
+  .param-value {
+    font-size: 24px;
+    font-weight: 700;
+    color: #fff;
+    font-variant-numeric: tabular-nums;
+    cursor: pointer;
+    transition: opacity 0.2s;
+  }
+  .param-value:hover { opacity: 0.7; }
+  .param-value.editing {
+    font-size: 20px;
+    cursor: text;
+    opacity: 1;
+  }
+  .param-value input {
+    width: 100px;
+    padding: 4px 8px;
+    border: 2px solid #667eea;
+    border-radius: 8px;
+    background: rgba(255,255,255,0.1);
+    color: #fff;
+    font-size: 20px;
+    font-weight: 700;
+    outline: none;
+  }
+  .param-value input:focus { border-color: #8ea4f0; }
+  .param-unit {
+    font-size: 13px;
+    font-weight: 400;
+    color: rgba(255,255,255,0.35);
+    margin-left: 3px;
+  }
+  .param-time {
+    font-size: 10px;
+    color: rgba(255,255,255,0.2);
+    margin-top: 4px;
+  }
+  .param-card .status-dot {
+    display: inline-block;
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    margin-right: 5px;
+  }
+  .param-card .status-dot.ok { background: #27ae60; }
+  .param-card .status-dot.warn { background: #f39c12; }
+  .param-card .status-dot.alert { background: #e74c3c; animation: blink 0.8s ease infinite; }
+  @keyframes blink { 50% { opacity: 0.3; } }
+  .upload-area {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+  }
+  .upload-btn {
+    padding: 10px 20px;
+    background: rgba(102,126,234,0.2);
+    color: #8ea4f0;
+    border: 1px dashed rgba(102,126,234,0.4);
+    border-radius: 12px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s;
+    flex: 1;
+    text-align: center;
+  }
+  .upload-btn:hover { background: rgba(102,126,234,0.3); border-color: rgba(102,126,234,0.6); }
+  .submit-btn {
+    padding: 10px 24px;
+    background: #667eea;
+    color: #fff;
+    border: none;
+    border-radius: 12px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    transition: background 0.2s;
+    white-space: nowrap;
+  }
+  .submit-btn:hover { background: #5a6fd6; }
+  .submit-btn:disabled { background: #4a5070; cursor: not-allowed; }
+  .img-preview {
+    display: none;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    background: rgba(255,255,255,0.04);
+    border-radius: 10px;
+    margin-top: 12px;
+  }
+  .img-preview.show { display: flex; }
+  .img-preview img {
+    width: 56px; height: 56px;
+    border-radius: 8px;
+    object-fit: cover;
+    border: 1px solid rgba(255,255,255,0.1);
+  }
+  .img-preview .file-info { flex: 1; font-size: 13px; color: rgba(255,255,255,0.5); }
+  .img-preview .file-info .name { color: rgba(255,255,255,0.7); }
+  .analyze-btn {
+    padding: 6px 14px;
+    background: rgba(102,126,234,0.2);
+    color: #8ea4f0;
+    border: 1px solid rgba(102,126,234,0.3);
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.2s;
+  }
+  .analyze-btn:hover { background: rgba(102,126,234,0.35); }
+  .analyze-btn:disabled { opacity: 0.4; cursor: wait; }
+  .remove-img-btn {
+    background: none; border: none;
+    color: rgba(255,255,255,0.3);
+    font-size: 20px; cursor: pointer;
+    padding: 2px 6px;
+    transition: color 0.2s;
+  }
+  .remove-img-btn:hover { color: #e74c3c; }
+  .analyze-progress {
+    display: none;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    background: rgba(255,255,255,0.04);
+    border-radius: 10px;
+    margin-top: 10px;
+    font-size: 13px;
+    color: rgba(255,255,255,0.5);
+  }
+  .analyze-progress.show { display: flex; }
+  .spinner {
+    width: 14px; height: 14px;
+    border: 2px solid rgba(255,255,255,0.1);
+    border-top-color: #667eea;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    flex-shrink: 0;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .records-section { margin-top: 8px; }
+  .record-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 14px;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    font-size: 13px;
+    color: rgba(255,255,255,0.55);
+  }
+  .record-item:last-child { border-bottom: none; }
+  .record-item .time { color: rgba(255,255,255,0.3); font-size: 11px; }
+  .record-item .vals { display: flex; gap: 12px; flex-wrap: wrap; }
+  .record-item .vals span { color: rgba(255,255,255,0.7); }
+  .clear-btn {
+    margin-top: 8px;
+    padding: 8px;
+    background: none;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 10px;
+    color: rgba(255,255,255,0.3);
+    font-size: 12px;
+    cursor: pointer;
+    width: 100%;
+    transition: color 0.2s, border-color 0.2s;
+  }
+  .clear-btn:hover { color: #e74c3c; border-color: rgba(231,76,60,0.3); }
+
+  /* Record action buttons */
+  .record-actions { display: flex; gap: 4px; flex-shrink: 0; }
+  .record-action-btn {
+    background: none; border: none;
+    font-size: 14px; cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 6px;
+    transition: background 0.2s;
+    color: rgba(255,255,255,0.3);
+    line-height: 1;
+  }
+  .record-action-btn:hover { background: rgba(255,255,255,0.08); }
+  .record-action-btn.edit:hover { color: #667eea; }
+  .record-action-btn.delete:hover { color: #e74c3c; }
+  .record-expanded {
+    display: none;
+    padding: 10px 14px 14px;
+    background: rgba(255,255,255,0.03);
+    border-radius: 0 0 10px 10px;
+    border-top: 1px solid rgba(255,255,255,0.04);
+  }
+  .record-expanded.show { display: block; }
+  .record-expanded .params { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 16px; font-size: 12px; }
+  .record-expanded .params .item { display: flex; justify-content: space-between; padding: 3px 0; color: rgba(255,255,255,0.5); }
+  .record-expanded .params .item .v { color: rgba(255,255,255,0.75); font-weight: 600; }
+  .record-expanded .edit-actions { display: flex; gap: 8px; margin-top: 10px; }
+  .record-expanded .edit-actions button {
+    flex: 1; padding: 6px 12px; border-radius: 8px;
+    border: none; font-size: 12px; cursor: pointer; font-weight: 600; transition: opacity 0.2s;
+  }
+  .record-expanded .edit-actions button:hover { opacity: 0.8; }
+  .record-expanded .edit-actions button.save-edit { background: #667eea; color: #fff; }
+  .record-expanded .edit-actions button.cancel-edit { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.5); }
+
+  /* Manual input field group with unit label */
+  .manual-group {
+    display: flex; flex-direction: column; gap: 2px;
+  }
+  .manual-group .unit-label {
+    font-size: 11px; color: rgba(255,255,255,0.35);
+    padding-left: 2px;
+  }
+  .manual-group .unit-label .unit-tag {
+    color: rgba(255,255,255,0.2); margin-left: 2px;
+  }
+  .manual-group input {
+    padding: 8px 12px; border-radius: 8px;
+    border: 1px solid rgba(255,255,255,0.1);
+    background: rgba(255,255,255,0.06);
+    color: #fff; font-size: 13px; outline: none;
+    transition: border-color 0.2s;
+  }
+  .manual-group input:focus { border-color: rgba(102,126,234,0.5); }
+  .manual-group input::placeholder { color: rgba(255,255,255,0.15); }
+
+  /* Record image in expanded detail */
+  .record-img {
+    margin-bottom: 10px; text-align: center;
+    background: rgba(0,0,0,0.2); border-radius: 8px;
+    padding: 8px; overflow: hidden;
+  }
+  .record-img img {
+    max-width: 100%; max-height: 160px;
+    border-radius: 6px; object-fit: contain;
+    cursor: pointer; transition: opacity 0.2s;
+  }
+  .record-img img:hover { opacity: 0.8; }
+  .record-img .no-img {
+    font-size: 11px; color: rgba(255,255,255,0.15);
+    padding: 16px 0;
+  }
+
+  /* Inline edit inputs in expanded record */
+  .record-expanded .params .item input {
+    width: 90px; padding: 2px 6px; border-radius: 6px;
+    border: 1px solid rgba(102,126,234,0.4);
+    background: rgba(255,255,255,0.08);
+    color: #fff; font-size: 12px; font-weight: 600; text-align: right;
+    outline: none;
+  }
+  .record-expanded .params .item input:focus { border-color: #667eea; }
+  .record-item-wrapper {
+    border-radius: 10px;
+    margin-bottom: 4px;
+    border: 1px solid transparent;
+    transition: border-color 0.2s;
+  }
+  .record-item-wrapper:hover { border-color: rgba(255,255,255,0.06); }
+  .record-item-wrapper.editing { border-color: rgba(102,126,234,0.3); background: rgba(102,126,234,0.04); }
+  .record-item-wrapper .record-item { cursor: pointer; }
+  .record-item-wrapper .record-item:hover { background: rgba(255,255,255,0.02); }
+  .record-item .idx { color: rgba(255,255,255,0.15); font-size: 11px; min-width: 28px; }
+
+  /* Search / filter bar */
+  .search-bar {
+    display: flex; gap: 8px; margin-bottom: 12px;
+  }
+  .search-bar input {
+    flex: 1;
+    padding: 8px 12px; border-radius: 8px;
+    border: 1px solid rgba(255,255,255,0.08);
+    background: rgba(255,255,255,0.04);
+    color: rgba(255,255,255,0.6); font-size: 12px;
+    outline: none; transition: border-color 0.2s;
+  }
+  .search-bar input:focus { border-color: rgba(102,126,234,0.3); }
+  .search-bar input::placeholder { color: rgba(255,255,255,0.2); }
+
+  .toast {
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%) translateY(-80px);
+    background: #333;
+    color: #fff;
+    padding: 10px 24px;
+    border-radius: 10px;
+    font-size: 14px;
+    opacity: 0;
+    transition: transform 0.3s, opacity 0.3s;
+    z-index: 999;
+    pointer-events: none;
+  }
+  .toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+  @media (max-width: 500px) {
+    .params-grid { grid-template-columns: 1fr; }
+    .upload-area { flex-direction: column; }
+    .submit-btn { width: 100%; }
+  }
+
+  /* Import / Export buttons row */
+  .io-row {
+    display: flex; gap: 8px; margin-top: 10px;
+  }
+  .io-row .io-btn {
+    flex: 1; padding: 8px; border-radius: 10px;
+    font-size: 12px; cursor: pointer; font-weight: 600;
+    transition: all 0.2s; text-align: center;
+    background: none; border: 1px solid rgba(255,255,255,0.08);
+    color: rgba(255,255,255,0.4);
+  }
+  .io-row .io-btn:hover { border-color: rgba(255,255,255,0.15); color: rgba(255,255,255,0.6); }
+  .io-row .io-btn.import-btn { border-color: rgba(102,126,234,0.3); color: #8ea4f0; }
+  .io-row .io-btn.import-btn:hover { background: rgba(102,126,234,0.1); }
+  .io-row .io-btn.export-btn { border-color: rgba(39,174,96,0.3); color: #5dd68b; }
+  .io-row .io-btn.export-btn:hover { background: rgba(39,174,96,0.1); }
+
+  /* Import progress / result toast overlay */
+  .import-summary {
+    position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%);
+    background: #1e2a3a; border-radius: 16px; padding: 28px 32px;
+    z-index: 1000; min-width: 340px; max-width: 440px;
+    border: 1px solid rgba(255,255,255,0.1);
+    box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+    display: none;
+  }
+  .import-summary.show { display: block; }
+  .import-summary h3 { color: #fff; font-size: 16px; margin-bottom: 12px; }
+  .import-summary .stat { font-size: 13px; color: rgba(255,255,255,0.5); line-height: 1.8; }
+  .import-summary .stat b { color: rgba(255,255,255,0.8); }
+  .import-summary .warn { color: #f39c12; font-size: 12px; margin-top: 8px; }
+  .import-summary .io-actions { display: flex; gap: 10px; margin-top: 16px; }
+  .import-summary .io-actions button {
+    flex: 1; padding: 10px; border-radius: 10px;
+    border: none; font-size: 13px; cursor: pointer; font-weight: 600;
+    transition: opacity 0.2s;
+  }
+  .import-summary .io-actions button:hover { opacity: 0.8; }
+  .import-summary .io-actions .confirm-import { background: #667eea; color: #fff; }
+  .import-summary .io-actions .cancel-import { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.5); }
+
+  /* Image lightbox zoom viewer */
+  .img-viewer {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.85);
+    z-index: 2000;
+    display: none;
+    justify-content: center;
+    align-items: center;
+    cursor: zoom-out;
+    backdrop-filter: blur(8px);
+  }
+  .img-viewer.show { display: flex; }
+  .img-viewer img {
+    max-width: 92vw;
+    max-height: 92vh;
+    border-radius: 12px;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.6);
+    object-fit: contain;
+    cursor: default;
+  }
+  .img-viewer .close-viewer {
+    position: fixed; top: 16px; right: 24px;
+    color: rgba(255,255,255,0.6); font-size: 28px;
+    cursor: pointer; background: none; border: none;
+    transition: color 0.2s; z-index: 2001;
+    line-height: 1;
+  }
+  .img-viewer .close-viewer:hover { color: #fff; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <h1>冷却系统监测仪表盘</h1>
+    <div class="sub" id="dateDisplay"></div>
+    <div class="time" id="recordCount">暂无监测数据</div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">📷 上传仪表照片</div>
+    <div class="upload-area">
+      <div class="upload-btn" id="uploadBtn">🖼 选择仪表照片 (自动识别参数)</div>
+      <button class="submit-btn" id="saveBtn">保存记录</button>
+    </div>
+    <div class="img-preview" id="imgPreview">
+      <img id="previewImg" src="">
+      <div class="file-info">
+        <div class="name" id="fileName"></div>
+        <div style="font-size:11px;margin-top:2px">点"提取数据"自动识别参数</div>
+      </div>
+      <button class="analyze-btn" id="analyzeBtn">🔍 提取数据</button>
+      <button class="remove-img-btn" id="removeImgBtn">×</button>
+    </div>
+    <div class="analyze-progress" id="analyzeProgress">
+      <div class="spinner"></div>
+      <span id="analyzeStatus">正在识别...</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">📊 当前参数</div>
+    <div class="params-grid" id="paramsGrid">
+      <div class="param-card">
+        <div class="param-label"><span class="status-dot" id="dot_0"></span>开式水塔输出流量</div>
+        <div class="param-value" id="val_0">--<span class="param-unit">L/Min</span></div>
+        <div class="param-time" id="time_0"></div>
+      </div>
+      <div class="param-card">
+        <div class="param-label"><span class="status-dot" id="dot_1"></span>开式水塔输出水温</div>
+        <div class="param-value" id="val_1">--<span class="param-unit">°C</span></div>
+        <div class="param-time" id="time_1"></div>
+      </div>
+      <div class="param-card">
+        <div class="param-label"><span class="status-dot" id="dot_2"></span>电导率</div>
+        <div class="param-value" id="val_2">--<span class="param-unit">us/cm</span></div>
+        <div class="param-time" id="time_2"></div>
+      </div>
+      <div class="param-card">
+        <div class="param-label"><span class="status-dot" id="dot_3"></span>温度(输入回路)</div>
+        <div class="param-value" id="val_3">--<span class="param-unit">°C</span></div>
+        <div class="param-time" id="time_3"></div>
+      </div>
+      <div class="param-card">
+        <div class="param-label"><span class="status-dot" id="dot_4"></span>压力</div>
+        <div class="param-value" id="val_4">--<span class="param-unit">bar</span></div>
+        <div class="param-time" id="time_4"></div>
+      </div>
+      <div class="param-card">
+        <div class="param-label"><span class="status-dot" id="dot_5"></span>流量(输出回路)</div>
+        <div class="param-value" id="val_5">--<span class="param-unit">L/Min</span></div>
+        <div class="param-time" id="time_5"></div>
+      </div>
+      <div class="param-card" style="grid-column: span 2;">
+        <div class="param-label"><span class="status-dot" id="dot_6"></span>温度(输出回路)</div>
+        <div class="param-value" id="val_6">--<span class="param-unit">°C</span></div>
+        <div class="param-time" id="time_6"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" id="manualCard" style="display:none">
+    <div class="card-title">⌨️ 手动输入</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div class="manual-group"><span class="unit-label">开式水塔输出流量 <span class="unit-tag">L/Min</span></span><input class="manual-input" data-key="waterFlow" placeholder="输入数值"></div>
+      <div class="manual-group"><span class="unit-label">开式水塔输出水温 <span class="unit-tag">°C</span></span><input class="manual-input" data-key="waterTemp" placeholder="输入数值"></div>
+      <div class="manual-group"><span class="unit-label">电导率 <span class="unit-tag">us/cm</span></span><input class="manual-input" data-key="conductivity" placeholder="输入数值"></div>
+      <div class="manual-group"><span class="unit-label">温度(输入回路) <span class="unit-tag">°C</span></span><input class="manual-input" data-key="tempIn" placeholder="输入数值"></div>
+      <div class="manual-group"><span class="unit-label">压力 <span class="unit-tag">bar</span></span><input class="manual-input" data-key="pressure" placeholder="输入数值"></div>
+      <div class="manual-group"><span class="unit-label">流量(输出回路) <span class="unit-tag">L/Min</span></span><input class="manual-input" data-key="flowOut" placeholder="输入数值"></div>
+      <div class="manual-group" style="grid-column:span 2"><span class="unit-label">温度(输出回路) <span class="unit-tag">°C</span></span><input class="manual-input" data-key="tempOut" placeholder="输入数值"></div>
+    </div>
+    <button class="submit-btn" id="manualApplyBtn" style="width:100%;margin-top:10px">应用手动输入</button>
+  </div>
+
+  <div class="card records-section">
+    <div class="card-title">📋 历史记录 <span id="recordCount2" style="font-size:11px;color:rgba(255,255,255,0.2);font-weight:400;text-transform:none"></span></div>
+    <div class="search-bar" id="searchBar" style="display:none">
+      <input type="text" id="searchInput" placeholder="🔍 搜索日期或参数值..." />
+      <span style="font-size:11px;color:rgba(255,255,255,0.2);align-self:center;white-space:nowrap" id="searchResultCount"></span>
+    </div>
+    <div id="recordsList">
+      <div style="text-align:center;padding:20px;color:rgba(255,255,255,0.2);font-size:13px">暂无记录</div>
+    </div>
+    <button class="clear-btn" id="clearBtn" style="display:none">🗑 清除所有记录</button>
+    <div class="io-row">
+      <button class="io-btn import-btn" id="importBtn">📥 导入 Excel</button>
+      <button class="io-btn export-btn" id="exportBtn">📤 导出 Excel</button>
+    </div>
+  </div>
+</div>
+
+<input type="file" id="imageInput" accept="image/*" style="display:none">
+<input type="file" id="excelInput" accept=".xlsx,.xls,.csv" style="display:none">
+<div class="toast" id="toast"></div>
+<div class="import-summary" id="importSummary">
+  <h3>📥 导入确认</h3>
+  <div class="stat" id="importStat"></div>
+  <div class="warn" id="importWarn"></div>
+  <div class="io-actions">
+    <button class="cancel-import" id="cancelImport">取消</button>
+    <button class="confirm-import" id="confirmImport">确认导入</button>
+  </div>
+</div>
+<div class="img-viewer" id="imgViewer">
+  <button class="close-viewer" id="closeViewer">✕</button>
+  <img id="viewerImg" src="" alt="放大查看">
+</div>
+
+<script>
+  const PARAMS = [
+    { key: 'waterFlow',      label: '开式水塔输出流量', unit: 'L/Min', thresholds: { warn: [0, 200], alert: [-1, 300] } },
+    { key: 'waterTemp',      label: '开式水塔输出水温', unit: '°C',    thresholds: { warn: [15, 35], alert: [10, 40] } },
+    { key: 'conductivity',   label: '电导率',           unit: 'us/cm', thresholds: { warn: [0, 100], alert: [-1, 200] } },
+    { key: 'tempIn',         label: '温度(输入回路)',    unit: '°C',    thresholds: { warn: [20, 45], alert: [15, 50] } },
+    { key: 'pressure',       label: '压力',             unit: 'bar',   thresholds: { warn: [0, 5], alert: [-1, 8] } },
+    { key: 'flowOut',        label: '流量(输出回路)',    unit: 'L/Min', thresholds: { warn: [0, 200], alert: [-1, 300] } },
+    { key: 'tempOut',        label: '温度(输出回路)',    unit: '°C',    thresholds: { warn: [20, 50], alert: [15, 55] } }
+  ];
+
+  // ---- IndexedDB storage (large capacity for records with images) ----
+  const DB_NAME = 'cooling_monitor_db';
+  const DB_VERSION = 1;
+  function openDB() {
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(DB_NAME, DB_VERSION);
+      req.onupgradeneeded = (e) => {
+        const db = e.target.result;
+        if (!db.objectStoreNames.contains('kv')) {
+          db.createObjectStore('kv', { keyPath: 'key' });
+        }
+      };
+      req.onsuccess = (e) => resolve(e.target.result);
+      req.onerror = (e) => reject(e.target.error);
+    });
+  }
+  async function dbGet(key) {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('kv', 'readonly');
+      const req = tx.objectStore('kv').get(key);
+      req.onsuccess = () => resolve(req.result ? req.result.value : null);
+      req.onerror = (e) => reject(e.target.error);
+      tx.oncomplete = () => db.close();
+    });
+  }
+  async function dbSet(key, value) {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('kv', 'readwrite');
+      tx.objectStore('kv').put({ key, value });
+      tx.oncomplete = () => { db.close(); resolve(); };
+      tx.onerror = (e) => reject(e.target.error);
+    });
+  }
+  async function dbDel(key) {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('kv', 'readwrite');
+      tx.objectStore('kv').delete(key);
+      tx.oncomplete = () => { db.close(); resolve(); };
+      tx.onerror = (e) => reject(e.target.error);
+    });
+  }
+  // ---- end IndexedDB ----
+
+  let latestData = JSON.parse(localStorage.getItem('cooling_latest') || 'null');
+  let records = [];
+  let recordsReady = false;  // true once IndexedDB data is loaded
+  let pendingImage = null;
+  let editingRecordIndex = -1;       // -1 = creating new, >=0 = updating existing record
+  let expandedRecordIndex = -1;      // which record's detail panel is open
+  let searchQuery = '';
+
+  const toast = document.getElementById('toast');
+  const imageInput = document.getElementById('imageInput');
+  const uploadBtn = document.getElementById('uploadBtn');
+  const saveBtn = document.getElementById('saveBtn');
+  const imgPreview = document.getElementById('imgPreview');
+  const previewImg = document.getElementById('previewImg');
+  const fileName = document.getElementById('fileName');
+  const analyzeBtn = document.getElementById('analyzeBtn');
+  const removeImgBtn = document.getElementById('removeImgBtn');
+  const analyzeProgress = document.getElementById('analyzeProgress');
+  const analyzeStatus = document.getElementById('analyzeStatus');
+  const recordsList = document.getElementById('recordsList');
+  const clearBtn = document.getElementById('clearBtn');
+  const dateDisplay = document.getElementById('dateDisplay');
+  const recordCount = document.getElementById('recordCount');
+  const recordCount2 = document.getElementById('recordCount2');
+  const searchInput = document.getElementById('searchInput');
+  const searchBar = document.getElementById('searchBar');
+  const searchResultCount = document.getElementById('searchResultCount');
+  const importBtn = document.getElementById('importBtn');
+  const exportBtn = document.getElementById('exportBtn');
+  const excelInput = document.getElementById('excelInput');
+  const importSummary = document.getElementById('importSummary');
+  const importStat = document.getElementById('importStat');
+  const importWarn = document.getElementById('importWarn');
+  const confirmImport = document.getElementById('confirmImport');
+  const cancelImport = document.getElementById('cancelImport');
+  const imgViewer = document.getElementById('imgViewer');
+  const viewerImg = document.getElementById('viewerImg');
+  const closeViewer = document.getElementById('closeViewer');
+  let _pendingImportRecords = []; // records awaiting import confirmation
+
+  const now = new Date();
+  const weekdays = ['日','一','二','三','四','五','六'];
+  dateDisplay.textContent = `${now.getFullYear()}年${now.getMonth()+1}月${now.getDate()}日 星期${weekdays[now.getDay()]}`;
+
+  let _savePromise = Promise.resolve();
+  function save() {
+    localStorage.setItem('cooling_latest', JSON.stringify(latestData));
+    // Serialized async write to IndexedDB (fire-and-forget but queued)
+    _savePromise = _savePromise.then(() => dbSet('cooling_records', records)).catch(e => {
+      console.error('IndexedDB save failed:', e);
+      showToast('存储空间不足，请清理旧记录');
+    });
+  }
+
+  function showToast(msg) {
+    toast.textContent = msg;
+    toast.classList.add('show');
+    clearTimeout(toast._timer);
+    toast._timer = setTimeout(() => toast.classList.remove('show'), 2500);
+  }
+
+  function getStatus(val, thresholds) {
+    if (val === null || val === undefined || val === '') return 'ok';
+    const [warnLow, warnHigh] = thresholds.warn;
+    const [alertLow, alertHigh] = thresholds.alert;
+    if (val < alertLow || val > alertHigh) return 'alert';
+    if (val < warnLow || val > warnHigh) return 'warn';
+    return 'ok';
+  }
+
+  function updateDashboard() {
+    if (!latestData) {
+      PARAMS.forEach((p, i) => {
+        const valEl = document.getElementById(`val_${i}`);
+        valEl.innerHTML = `--<span class="param-unit">${p.unit}</span>`;
+        valEl.onclick = () => editParamValue(i);
+        document.getElementById(`time_${i}`).textContent = '';
+        document.getElementById(`dot_${i}`).className = 'status-dot ok';
+      });
+      recordCount.textContent = '暂无监测数据';
+      return;
+    }
+
+    recordCount.textContent = `最新记录: ${latestData.savedAt}`;
+
+    PARAMS.forEach((p, i) => {
+      const valEl = document.getElementById(`val_${i}`);
+      const timeEl = document.getElementById(`time_${i}`);
+      const dotEl = document.getElementById(`dot_${i}`);
+      const val = latestData[p.key];
+
+      valEl.onclick = () => editParamValue(i);
+
+      if (val !== null && val !== undefined && val !== '') {
+        const num = parseFloat(val);
+        valEl.innerHTML = `${val}<span class="param-unit">${p.unit}</span>`;
+        timeEl.textContent = latestData.savedAt;
+        const status = getStatus(num, p.thresholds);
+        dotEl.className = `status-dot ${status}`;
+      } else {
+        valEl.innerHTML = `--<span class="param-unit">${p.unit}</span>`;
+        timeEl.textContent = '';
+        dotEl.className = 'status-dot ok';
+      }
+    });
+  }
+
+  function editParamValue(idx) {
+    const p = PARAMS[idx];
+    const valEl = document.getElementById(`val_${idx}`);
+    const current = latestData ? latestData[p.key] : '';
+
+    if (valEl.classList.contains('editing')) return;
+    valEl.classList.add('editing');
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.inputMode = 'decimal';
+    input.value = current || '';
+    input.addEventListener('blur', () => finishEdit(idx, input.value));
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') finishEdit(idx, input.value);
+      if (e.key === 'Escape') cancelEdit(idx, input);
+    });
+    input.addEventListener('click', (e) => e.stopPropagation());
+
+    valEl.innerHTML = '';
+    valEl.appendChild(input);
+    input.focus();
+    input.select();
+  }
+
+  function finishEdit(idx, raw) {
+    const val = raw.trim();
+    const p = PARAMS[idx];
+    if (!latestData) {
+      latestData = { savedAt: '', ...Object.fromEntries(PARAMS.map(p => [p.key, ''])) };
+    }
+    latestData[p.key] = val;
+    const now = new Date();
+    latestData.savedAt = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+    save();
+    updateDashboard();
+  }
+
+  function cancelEdit(idx, inputEl) {
+    const p = PARAMS[idx];
+    const valEl = document.getElementById(`val_${idx}`);
+    valEl.classList.remove('editing');
+    const current = latestData ? (latestData[p.key] || '--') : '--';
+    valEl.innerHTML = `${current}<span class="param-unit">${p.unit}</span>`;
+  }
+
+  function renderRecords() {
+    if (records.length === 0) {
+      recordsList.innerHTML = '<div style="text-align:center;padding:20px;color:rgba(255,255,255,0.2);font-size:13px">暂无记录</div>';
+      clearBtn.style.display = 'none';
+      searchBar.style.display = 'none';
+      recordCount2.textContent = '';
+      return;
+    }
+    clearBtn.style.display = 'block';
+    recordCount2.textContent = `共 ${records.length} 条`;
+
+    const filtered = searchQuery
+      ? records.filter(r => {
+          const q = searchQuery.toLowerCase();
+          if (r.savedAt && r.savedAt.toLowerCase().includes(q)) return true;
+          return PARAMS.some(p => {
+            const v = r[p.key];
+            return v !== null && v !== undefined && v !== '' && String(v).toLowerCase().includes(q);
+          });
+        })
+      : records;
+
+    searchBar.style.display = 'block';
+    searchResultCount.textContent = searchQuery ? `筛选 ${filtered.length}/${records.length}` : '';
+
+    if (filtered.length === 0) {
+      recordsList.innerHTML = `<div style="text-align:center;padding:20px;color:rgba(255,255,255,0.2);font-size:13px">无匹配记录</div>`;
+      return;
+    }
+
+    // Show latest first
+    const display = filtered.slice().reverse();
+
+    recordsList.innerHTML = display.map((r, displayIdx) => {
+      const actualIdx = records.indexOf(r);
+      const isOpen = expandedRecordIndex === actualIdx;
+      const isEditing = editingRecordIndex === actualIdx;
+
+      // Summary line: show first 3 non-empty values
+      const summaryVals = PARAMS.map(p => {
+        const v = r[p.key];
+        if (v === null || v === undefined || v === '') return null;
+        return `${v}${p.unit}`;
+      }).filter(v => v !== null).slice(0, 3).join(' · ');
+
+      return `<div class="record-item-wrapper ${isEditing ? 'editing' : ''}">
+        <div class="record-item" data-idx="${actualIdx}">
+          <span class="idx">#${records.length - displayIdx}</span>
+          <span class="time">${r.savedAt || '--'}</span>
+          <span class="vals"><span>${summaryVals || '(空)'}${summaryVals && PARAMS.some(p => r[p.key] !== null && r[p.key] !== undefined && r[p.key] !== '') ? ' …' : ''}</span></span>
+          <span class="record-actions">
+            <button class="record-action-btn edit" data-action="edit" data-idx="${actualIdx}" title="编辑">✏️</button>
+            <button class="record-action-btn delete" data-action="delete" data-idx="${actualIdx}" title="删除">🗑️</button>
+            <button class="record-action-btn toggle-detail" data-action="toggle" data-idx="${actualIdx}" title="展开详情">${isOpen ? '▲' : '▼'}</button>
+          </span>
+        </div>
+        <div class="record-expanded ${isOpen ? 'show' : ''}" data-idx="${actualIdx}">
+          ${r._img ? `<div class="record-img"><img src="${r._img}" alt="仪表照片" class="clickable-img" title="点击放大"></div>`
+                   : `<div class="record-img"><div class="no-img">📷 无照片</div></div>`}
+          <div class="params">
+            ${PARAMS.map((p, pi) => {
+              const val = r[p.key] !== null && r[p.key] !== undefined && r[p.key] !== '' ? r[p.key] : '';
+              if (isEditing) {
+                return `<div class="item"><span>${p.label}</span><input type="text" inputmode="decimal" class="edit-field" data-key="${p.key}" value="${val}" placeholder="--"></div>`;
+              }
+              return `<div class="item"><span>${p.label}</span><span class="v">${val || '--'} ${val ? p.unit : ''}</span></div>`;
+            })}
+          </div>
+          ${isEditing
+            ? `<div class="edit-actions">
+                <button class="save-edit" data-idx="${actualIdx}">💾 保存修改</button>
+                <button class="cancel-edit" data-idx="${actualIdx}">取消</button>
+              </div>`
+            : `<div class="edit-actions" style="margin-top:6px">
+                <button class="load-to-dash" data-idx="${actualIdx}" style="background:rgba(102,126,234,0.15);color:#8ea4f0">📋 加载到仪表盘</button>
+              </div>`}
+        </div>
+      </div>`;
+    }).join('');
+
+    // Bind event listeners for record actions (use event delegation on recordsList)
+  }
+
+  function bindRecordEvents() {
+    // Click on record item to toggle details
+    recordsList.querySelectorAll('.record-item').forEach(el => {
+      el.addEventListener('click', (e) => {
+        if (e.target.closest('.record-actions')) return;
+        const idx = parseInt(el.dataset.idx);
+        toggleRecordDetail(idx);
+      });
+    });
+
+    // Action buttons
+    recordsList.querySelectorAll('[data-action]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const idx = parseInt(btn.dataset.idx);
+        const action = btn.dataset.action;
+        if (action === 'delete') deleteRecord(idx);
+        else if (action === 'edit') editRecord(idx);
+        else if (action === 'toggle') toggleRecordDetail(idx);
+      });
+    });
+
+    // Save edit buttons
+    recordsList.querySelectorAll('.save-edit').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const idx = parseInt(btn.dataset.idx);
+        saveRecordEdit(idx);
+      });
+    });
+
+    // Cancel edit buttons
+    recordsList.querySelectorAll('.cancel-edit').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const idx = parseInt(btn.dataset.idx);
+        cancelRecordEdit(idx);
+      });
+    });
+
+    // Load record data into dashboard
+    recordsList.querySelectorAll('.load-to-dash').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const idx = parseInt(btn.dataset.idx);
+        const r = records[idx];
+        if (!r) return;
+        latestData = { ...r };
+        // Restore image preview if present
+        if (r._img) {
+          pendingImage = r._img;
+          previewImg.src = r._img;
+          fileName.textContent = '📷 已加载历史照片';
+          imgPreview.classList.add('show');
+        } else {
+          pendingImage = null;
+          imgPreview.classList.remove('show');
+        }
+        save();
+        updateDashboard();
+        editingRecordIndex = idx;  // Set to update mode
+        expandedRecordIndex = -1;
+        renderRecords();
+        bindRecordEvents();
+        // Scroll to top to see dashboard
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        showToast('已加载到仪表盘，点击"保存记录"更新');
+      });
+    });
+  }
+
+  function toggleRecordDetail(idx) {
+    if (expandedRecordIndex === idx) {
+      expandedRecordIndex = -1;
+    } else {
+      expandedRecordIndex = idx;
+      // If editing another record, close its edit mode
+      if (editingRecordIndex !== -1 && editingRecordIndex !== idx) {
+        editingRecordIndex = -1;
+      }
+    }
+    renderRecords();
+    // Re-bind events after re-render
+    bindRecordEvents();
+    searchInput.value = searchQuery;
+  }
+
+  function deleteRecord(idx) {
+    if (!recordsReady) { showToast('正在加载数据，请稍后...'); return; }
+    const r = records[idx];
+    if (!r) return;
+    if (!confirm(`确认删除 ${r.savedAt || '--'} 这条记录？`)) return;
+    records.splice(idx, 1);
+    if (editingRecordIndex === idx) editingRecordIndex = -1;
+    if (expandedRecordIndex === idx) expandedRecordIndex = -1;
+    if (editingRecordIndex > idx) editingRecordIndex--;
+    if (expandedRecordIndex > idx) expandedRecordIndex--;
+    // If the deleted record was shown on the dashboard, clear it and its image
+    if (latestData && latestData.savedAt === r.savedAt) {
+      latestData = null;
+      pendingImage = null;
+      imgPreview.classList.remove('show');
+    }
+    save();
+    renderRecords();
+    bindRecordEvents();
+    updateDashboard();
+    showToast('已删除');
+  }
+
+  function editRecord(idx) {
+    const r = records[idx];
+    if (!r) return;
+    // Toggle edit mode
+    if (editingRecordIndex === idx) {
+      editingRecordIndex = -1;
+    } else {
+      editingRecordIndex = idx;
+      expandedRecordIndex = idx;
+      // Sync dashboard to this record so image handling is consistent
+      latestData = { ...r };
+      // Also restore image preview if the record has one
+      if (r._img) {
+        pendingImage = r._img;
+        previewImg.src = r._img;
+        fileName.textContent = '📷 历史照片';
+        imgPreview.classList.add('show');
+      } else if (!pendingImage) {
+        // Only clear if we don't have a pending upload
+        imgPreview.classList.remove('show');
+      }
+      updateDashboard();
+    }
+    renderRecords();
+    bindRecordEvents();
+    searchInput.value = searchQuery;
+  }
+
+  function saveRecordEdit(idx) {
+    const r = records[idx];
+    if (!r) return;
+    const wrapper = document.querySelector(`.record-item-wrapper.editing`);
+    if (!wrapper) return;
+    const inputs = wrapper.querySelectorAll('.edit-field');
+    let changed = false;
+    inputs.forEach(inp => {
+      const key = inp.dataset.key;
+      const val = inp.value.trim();
+      if (r[key] !== val) { r[key] = val; changed = true; }
+    });
+    if (changed) {
+      // Update savedAt
+      const now = new Date();
+      r.savedAt = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+      // Carry over newly uploaded image to the record (if different from what the record has)
+      if (latestData && latestData._img && r._img !== latestData._img) {
+        r._img = latestData._img;
+      }
+      // Sync dashboard to reflect changes (including the image)
+      latestData = { ...r };
+      save();
+      updateDashboard();
+      showToast('已更新');
+    } else {
+      showToast('无修改');
+    }
+    editingRecordIndex = -1;
+    renderRecords();
+    bindRecordEvents();
+  }
+
+  function cancelRecordEdit(idx) {
+    editingRecordIndex = -1;
+    renderRecords();
+    bindRecordEvents();
+  }
+
+  // Search / filter records
+  searchInput.addEventListener('input', () => {
+    searchQuery = searchInput.value.trim();
+    renderRecords();
+    bindRecordEvents();
+  });
+
+  // ---- Excel Import / Export ----
+
+  // Column definitions for Excel (Chinese headers)
+  const EXCEL_COLS = [
+    { key: 'idx',        label: '序号' },
+    { key: 'savedAt',    label: '日期时间' },
+    ...PARAMS.map(p => ({ key: p.key, label: `${p.label}(${p.unit})` })),
+    { key: '_hasPhoto',  label: '照片' },
+  ];
+
+  function exportToExcel() {
+    if (!recordsReady) { showToast('正在加载数据，请稍后...'); return; }
+    if (records.length === 0) { showToast('暂无记录可导出'); return; }
+
+    try {
+      const now = new Date();
+      const dateStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+
+      const data = records.map((r, i) => {
+        const row = {};
+        row['序号'] = i + 1;
+        row['日期时间'] = r.savedAt || '';
+        PARAMS.forEach(p => {
+          const v = r[p.key];
+          row[`${p.label}(${p.unit})`] = (v !== null && v !== undefined && v !== '') ? parseFloat(v) : '';
+        });
+        row['照片'] = r._img ? `有 (photo_${i+1}.jpg)` : '无';
+        return row;
+      });
+
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.json_to_sheet(data);
+      ws['!cols'] = [
+        { wch: 6 }, { wch: 20 }, { wch: 18 }, { wch: 18 },
+        { wch: 14 }, { wch: 18 }, { wch: 10 }, { wch: 18 },
+        { wch: 18 }, { wch: 22 },
+      ];
+      XLSX.utils.book_append_sheet(wb, ws, '冷却监测数据');
+      const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+
+      // Check if any record has a photo
+      const hasPhoto = records.some(r => r._img);
+
+      if (hasPhoto && typeof JSZip !== 'undefined') {
+        // Create ZIP containing xlsx + photos
+        const zip = new JSZip();
+        zip.file(`冷却监测数据_${dateStr}.xlsx`, wbout);
+
+        const photoFolder = zip.folder('照片');
+        let photoCount = 0;
+        records.forEach((r, i) => {
+          if (r._img) {
+            const base64Data = r._img.split(',')[1] || r._img;
+            photoFolder.file(`photo_${i+1}.jpg`, base64Data, { base64: true });
+            photoCount++;
+          }
+        });
+
+        zip.generateAsync({ type: 'blob' }).then((blob) => {
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `冷却监测数据_${dateStr}.zip`;
+          a.click();
+          URL.revokeObjectURL(url);
+          showToast(`已导出 ${records.length} 条记录 + ${photoCount} 张照片 (.zip)`);
+        });
+      } else {
+        // No photos — export plain xlsx
+        const blob = new Blob([wbout], { type: 'application/octet-stream' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `冷却监测数据_${dateStr}.xlsx`;
+        a.click();
+        URL.revokeObjectURL(url);
+        showToast(`已导出 ${records.length} 条记录`);
+      }
+    } catch (e) {
+      console.error('导出失败:', e);
+      showToast('导出失败: ' + (e.message || '未知错误'));
+    }
+  }
+
+  function handleImportFile(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    e.target.value = '';
+
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const data = new Uint8Array(ev.target.result);
+        const wb = XLSX.read(data, { type: 'array', cellDates: true });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const json = XLSX.utils.sheet_to_json(ws, { defval: '' });
+
+        if (!json || json.length === 0) {
+          showToast('文件为空或格式不正确');
+          return;
+        }
+
+        // Map columns by header name
+        const headers = Object.keys(json[0]);
+        const colMap = {};
+        EXCEL_COLS.forEach(ec => {
+          // Find matching header
+          const match = headers.find(h => h.includes(ec.label) || ec.label.includes(h));
+          if (match) colMap[ec.key] = match;
+        });
+
+        // Parse rows
+        const imported = [];
+        let parseErrors = 0;
+        json.forEach((row, i) => {
+          const record = { savedAt: '' };
+          // Parse date
+          const rawDate = row[colMap['savedAt']] || '';
+          if (rawDate) {
+            if (typeof rawDate === 'number' && rawDate > 40000) {
+              // Excel serial date number
+              const d = XLSX.SSF.parse_date_code(rawDate);
+              if (d) {
+                record.savedAt = `${d.y}-${String(d.m).padStart(2,'0')}-${String(d.d).padStart(2,'0')} ${String(d.H || 0).padStart(2,'0')}:${String(d.M || 0).padStart(2,'0')}`;
+              }
+            } else {
+              record.savedAt = String(rawDate).trim();
+            }
+          }
+
+          // Parse parameters
+          PARAMS.forEach(p => {
+            const header = colMap[p.key];
+            if (header) {
+              const val = row[header];
+              record[p.key] = (val !== '' && val !== null && val !== undefined) ? String(val).trim() : '';
+            } else {
+              record[p.key] = '';
+            }
+          });
+
+          // Check if at least one parameter has value
+          const hasVal = PARAMS.some(p => record[p.key] !== '');
+          if (hasVal) {
+            imported.push(record);
+          } else {
+            parseErrors++;
+          }
+        });
+
+        if (imported.length === 0) {
+          showToast('未解析到有效数据' + (parseErrors > 0 ? `（${parseErrors} 行跳过）` : ''));
+          return;
+        }
+
+        // Show confirmation dialog
+        _pendingImportRecords = imported;
+        const existHasPhoto = records.filter(r => r._img).length;
+        const newHasPhoto = imported.filter(r => r._img).length;
+        importStat.innerHTML = `
+          文件中共 <b>${json.length}</b> 行<br>
+          解析出 <b>${imported.length}</b> 条有效记录${parseErrors > 0 ? `<span style="color:#f39c12">（${parseErrors} 行无参数已跳过）</span>` : ''}<br>
+          当前已有 <b>${records.length}</b> 条记录<br>
+          导入后总计 <b>${records.length + imported.length}</b> 条记录
+        `;
+        importWarn.textContent = imported.length > 500
+          ? `⚠️ 导入 ${imported.length} 条数量较大，请确认浏览器存储空间充足`
+          : '';
+        importSummary.classList.add('show');
+      } catch (e) {
+        console.error('导入解析失败:', e);
+        showToast('导入失败: 文件格式错误');
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+  function confirmImportAction() {
+    if (_pendingImportRecords.length === 0) return;
+    records.push(..._pendingImportRecords);
+    if (records.length > 2000) records = records.slice(-2000);
+    _pendingImportRecords = [];
+    importSummary.classList.remove('show');
+    save();
+    renderRecords();
+    bindRecordEvents();
+    updateDashboard();
+    searchInput.value = searchQuery;
+    showToast('导入完成');
+  }
+
+  function cancelImportAction() {
+    _pendingImportRecords = [];
+    importSummary.classList.remove('show');
+    showToast('已取消导入');
+  }
+
+  exportBtn.addEventListener('click', exportToExcel);
+  importBtn.addEventListener('click', () => { if (recordsReady) excelInput.click(); else showToast('正在加载数据，请稍后...'); });
+  excelInput.addEventListener('change', handleImportFile);
+  confirmImport.addEventListener('click', confirmImportAction);
+  cancelImport.addEventListener('click', cancelImportAction);
+  // Close import summary on backdrop click
+  importSummary.addEventListener('click', (e) => { if (e.target === importSummary) cancelImportAction(); });
+
+  // ---- Image viewer (lightbox) ----
+  function openImageViewer(src) {
+    viewerImg.src = src;
+    imgViewer.classList.add('show');
+    document.body.style.overflow = 'hidden';
+  }
+  function closeImageViewer() {
+    imgViewer.classList.remove('show');
+    viewerImg.src = '';
+    document.body.style.overflow = '';
+  }
+  // Event delegation on recordsList for clickable images (dynamically rendered)
+  recordsList.addEventListener('click', (e) => {
+    const img = e.target.closest('.clickable-img');
+    if (img) { openImageViewer(img.src); }
+  });
+  closeViewer.addEventListener('click', closeImageViewer);
+  imgViewer.addEventListener('click', (e) => { if (e.target === imgViewer) closeImageViewer(); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeImageViewer(); });
+
+  // ===== OCR 配置 =====
+  // 部署后改为实际的 Render 服务地址
+  const OCR_API_URL = 'http://localhost:8000';
+  const DEVICE_TYPE = 'chiller';
+
+  uploadBtn.addEventListener('click', () => imageInput.click());
+
+  imageInput.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) {
+      showToast('图片超过 10MB 限制');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      pendingImage = ev.target.result;
+      previewImg.src = pendingImage;
+      fileName.textContent = file.name.length > 25 ? file.name.slice(0, 22) + '...' : file.name;
+      imgPreview.classList.add('show');
+      // Save image to latestData for persistence in records
+      if (!latestData) latestData = { savedAt: '', ...Object.fromEntries(PARAMS.map(p => [p.key, ''])) };
+      latestData._img = pendingImage;
+      save();
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  });
+
+  removeImgBtn.addEventListener('click', () => {
+    pendingImage = null;
+    imgPreview.classList.remove('show');
+    if (latestData) { delete latestData._img; save(); }
+  });
+
+  analyzeBtn.addEventListener('click', async () => {
+    if (!pendingImage) { showToast('请先选择图片'); return; }
+    analyzeBtn.disabled = true;
+    analyzeProgress.classList.add('show');
+    analyzeStatus.textContent = '上传图片识别中...';
+
+    try {
+      // 将 base64 dataUrl 转为 Blob 上传
+      const blob = await (await fetch(pendingImage)).blob();
+      const formData = new FormData();
+      formData.append('image', blob, 'photo.jpg');
+      formData.append('device_type', DEVICE_TYPE);
+
+      const response = await fetch(`${OCR_API_URL}/api/ocr`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.error || `服务器错误 ${response.status}`);
+      }
+
+      const result = await response.json();
+      console.log('OCR API 结果:', result);
+
+      analyzeStatus.textContent = '解析中...';
+
+      const values = result.values || [];
+      const ok = result.ok;
+      const msg = result.msg || '';
+
+      // 将 API 返回的值列表映射到 PARAMS
+      const extracted = {};
+      // 使用 API 返回的 fields 信息（含 key）
+      if (result.fields && result.fields.length > 0) {
+        result.fields.forEach((f, i) => {
+          // waterFlow→waterFlow, 或按索引位置映射
+          if (f.key && PARAMS.some(p => p.key === f.key)) {
+            extracted[f.key] = f.value !== null && f.value !== undefined ? String(f.value) : '';
+          } else if (i < PARAMS.length) {
+            extracted[PARAMS[i].key] = f.value !== null && f.value !== undefined ? String(f.value) : '';
+          }
+        });
+      } else {
+        // 按位置映射
+        PARAMS.forEach((p, i) => {
+          const val = values[i];
+          extracted[p.key] = (val !== null && val !== undefined) ? String(val) : '';
+        });
+      }
+
+      const filled = Object.values(extracted).filter(v => v && v !== '').length;
+
+      if (filled === 0) {
+        showToast(`未识别到数字参数: ${msg}`);
+        analyzeBtn.disabled = false;
+        analyzeProgress.classList.remove('show');
+        return;
+      } else if (!ok || filled < PARAMS.length) {
+        showToast(`识别 ${filled}/${PARAMS.length} 项，请核对补全`);
+      } else {
+        showToast(`成功提取 ${filled}/${PARAMS.length} 项参数`);
+      }
+
+      const now = new Date();
+      const timeStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+
+      if (!latestData) latestData = { savedAt: '', ...Object.fromEntries(PARAMS.map(p => [p.key, ''])) };
+      Object.assign(latestData, extracted);
+      latestData.savedAt = timeStr;
+      save();
+      updateDashboard();
+
+    } catch (err) {
+      console.error('OCR API 错误:', err);
+      if (err.message.includes('fetch')) {
+        showToast('无法连接 OCR 服务，请确认后端已启动');
+      } else {
+        showToast(`识别失败: ${err.message || '未知错误'}`);
+      }
+    } finally {
+      analyzeBtn.disabled = false;
+      analyzeProgress.classList.remove('show');
+    }
+  });
+
+  saveBtn.addEventListener('click', () => {
+    if (!recordsReady) { showToast('正在加载数据，请稍后...'); return; }
+    if (!latestData) {
+      showToast('暂无数据，请先上传图片');
+      return;
+    }
+    const hasVal = PARAMS.some(p => latestData[p.key] !== null && latestData[p.key] !== undefined && latestData[p.key] !== '');
+    if (!hasVal) {
+      showToast('请先提取或输入参数');
+      return;
+    }
+
+    const now = new Date();
+    const timeStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+    latestData.savedAt = timeStr;
+
+    if (editingRecordIndex >= 0 && editingRecordIndex < records.length) {
+      // Update existing record
+      records[editingRecordIndex] = { ...latestData };
+      editingRecordIndex = -1;
+      showToast('记录已更新');
+    } else {
+      // Create new record
+      records.push({ ...latestData });
+      if (records.length > 2000) records = records.slice(-2000);
+      showToast('记录已保存');
+    }
+    save();
+    updateDashboard();
+    renderRecords();
+    bindRecordEvents();
+    searchInput.value = searchQuery;
+  });
+
+  clearBtn.addEventListener('click', () => {
+    if (!recordsReady) { showToast('正在加载数据，请稍后...'); return; }
+    if (!confirm('确认清除所有历史记录？')) return;
+    records = [];
+    editingRecordIndex = -1;
+    expandedRecordIndex = -1;
+    latestData = null;
+    pendingImage = null;
+    imgPreview.classList.remove('show');
+    save();
+    renderRecords();
+    bindRecordEvents();
+    updateDashboard();
+    showToast('已清除所有记录');
+  });
+
+  document.getElementById('manualCard').style.display = 'block';
+
+  document.querySelectorAll('.manual-input').forEach(inp => {
+    inp.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        const next = inp.parentElement.querySelector('.manual-input:focus');
+        if (next) next.focus();
+      }
+    });
+  });
+
+  document.getElementById('manualApplyBtn').addEventListener('click', () => {
+    if (!latestData) latestData = { savedAt: '', ...Object.fromEntries(PARAMS.map(p => [p.key, ''])) };
+    let count = 0;
+    document.querySelectorAll('.manual-input').forEach(inp => {
+      const val = inp.value.trim();
+      if (val) {
+        latestData[inp.dataset.key] = val;
+        count++;
+      }
+    });
+    if (count === 0) { showToast('请至少输入一项数值'); return; }
+    const now = new Date();
+    latestData.savedAt = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+    save();
+    updateDashboard();
+    showToast(`已应用 ${count} 项`);
+  });
+
+  // ---- Async initialization: load records from IndexedDB ----
+  (async function init() {
+    try {
+      const stored = await dbGet('cooling_records');
+      if (Array.isArray(stored)) records = stored;
+      else records = [];
+    } catch (e) {
+      console.warn('IndexedDB load failed, starting empty:', e);
+      records = [];
+    }
+
+    // Migrate old localStorage records if IndexedDB was empty
+    if (records.length === 0) {
+      const legacy = JSON.parse(localStorage.getItem('cooling_records') || '[]');
+      if (Array.isArray(legacy) && legacy.length > 0) {
+        records = legacy;
+        save(); // persist to IndexedDB
+        localStorage.removeItem('cooling_records'); // cleanup old key
+      }
+    }
+
+    recordsReady = true;
+    updateDashboard();
+    renderRecords();
+    bindRecordEvents();
+  })();
+</script>
+</body>
+</html>
