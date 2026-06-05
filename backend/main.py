@@ -31,7 +31,11 @@ app.add_middleware(
 
 @app.get("/")
 def root():
-    """健康检查"""
+    """返回前端页面，找不到才返回 JSON 健康检查"""
+    frontend_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "index.html")
+    if os.path.exists(frontend_path):
+        from fastapi.responses import FileResponse
+        return FileResponse(frontend_path)
     return {
         "status": "ok",
         "message": "设备点检数字系统 OCR API 运行中",
