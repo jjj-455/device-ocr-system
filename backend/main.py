@@ -60,7 +60,7 @@ def list_devices():
 
 
 @app.post("/api/ocr")
-async def ocr_recognize(
+async def handle_ocr(
     image: UploadFile = File(...),
     device_type: str = Form("chiller"),
 ):
