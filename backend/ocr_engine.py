@@ -7,7 +7,7 @@ import re
 import cv2
 import numpy as np
 from PIL import Image
-from rapidocr import RapidOCR
+from rapidocr_onnxruntime import RapidOCR
 
 _ocr = None
 def _get_ocr():
