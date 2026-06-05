@@ -7,7 +7,7 @@ import re
 import cv2
 import numpy as np
 from PIL import Image
-from rapidocr_onnxruntime import RapidOCR
+from rapidocr import RapidOCR
 
 _ocr = None
 def _get_ocr():
@@ -205,8 +205,16 @@ def recognize(image_path, strategy="position_sort"):
 
     # Step 2: PP-OCRv4 三步识别
     ocr = _get_ocr()
-    output = ocr(img_np)
-    ocr_results = list(zip(output.txts, output.scores, output.boxes))
+    raw_output = ocr(img_np)
+    # 兼容新版 rapidocr-onnxruntime（返回 tuple）和旧版（返回对象）
+    if isinstance(raw_output, tuple):
+        result_list, _ = raw_output
+        if result_list is None:
+            ocr_results = []
+        else:
+            ocr_results = [(item[1], item[2], item[0]) for item in result_list]
+    else:
+        ocr_results = list(zip(raw_output.txts, raw_output.scores, raw_output.boxes))
 
     # Step 3: 提取数字
     numbers = extract_numbers(ocr_results, img_w, img_h)
@@ -253,11 +261,17 @@ def recognize(image_path, strategy="position_sort"):
 
             ocr = _get_ocr()
             up_np = np.array(Image.fromarray(up, mode='L').convert('RGB'))[:, :, ::-1]
-            crop_output = ocr(up_np)
+            crop_raw = ocr(up_np)
 
             # 提取裁剪图中的所有文本（含位置）
             crop_items = []  # (text, val_or_none, orig_x, orig_y)
-            for text, score, box in zip(crop_output.txts, crop_output.scores, crop_output.boxes):
+            # 兼容新版 rapidocr-onnxruntime（返回 tuple）和旧版（返回对象）
+            if isinstance(crop_raw, tuple):
+                crop_list, _ = crop_raw
+                crop_zip = [(item[1], item[2], item[0]) for item in crop_list] if crop_list else []
+            else:
+                crop_zip = list(zip(crop_raw.txts, crop_raw.scores, crop_raw.boxes))
+            for text, score, box in crop_zip:
                 if score < 0.3:
                     continue
                 xs = [p[0] for p in box]
