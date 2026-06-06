@@ -9,6 +9,7 @@
 <title>冷却系统监测仪表盘</title>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
@@ -530,6 +531,18 @@
       <button class="io-btn export-btn" id="exportBtn">📤 导出 Excel</button>
     </div>
   </div>
+
+  <div class="card">
+    <div class="card-title">📈 趋势图 <span style="font-size:11px;color:rgba(255,255,255,0.2);font-weight:400;text-transform:none">— 按日聚合平均值</span></div>
+    <div style="margin-bottom:12px">
+      <select id="chartParamSelect" style="width:100%;padding:10px 14px;border-radius:10px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.06);color:#fff;font-size:14px;outline:none;appearance:auto;-webkit-appearance:auto;">
+        <option value="" disabled selected style="color:rgba(255,255,255,0.3)">选择参数查看趋势...</option>
+      </select>
+    </div>
+    <canvas id="trendChart" height="220" style="width:100%;max-height:260px"></canvas>
+    <div id="chartEmpty" style="text-align:center;padding:20px;color:rgba(255,255,255,0.2);font-size:13px;display:none">暂无足够数据绘制趋势图</div>
+  </div>
+
 </div>
 
 <input type="file" id="imageInput" accept="image/*" style="display:none">
@@ -976,6 +989,7 @@
     renderRecords();
     bindRecordEvents();
     updateDashboard();
+    renderChart();
     showToast('已删除');
   }
 
@@ -1268,6 +1282,7 @@
     bindRecordEvents();
     updateDashboard();
     searchInput.value = searchQuery;
+    renderChart();
     showToast('导入完成');
   }
 
@@ -1474,6 +1489,7 @@
     renderRecords();
     bindRecordEvents();
     searchInput.value = searchQuery;
+    renderChart();
   });
 
   clearBtn.addEventListener('click', async () => {
@@ -1491,6 +1507,7 @@
     renderRecords();
     bindRecordEvents();
     updateDashboard();
+    renderChart();
     showToast('已清除所有记录');
   });
 
@@ -1523,7 +1540,121 @@
     showToast(`已应用 ${count} 项`);
   });
 
-  // ---- Async initialization: load records from server API ----
+  // ===== 趋势图 =====
+  let trendChartInstance = null;
+  const chartParamSelect = document.getElementById('chartParamSelect');
+  const trendChartCanvas = document.getElementById('trendChart');
+  const chartEmptyEl = document.getElementById('chartEmpty');
+
+  // Populate dropdown
+  PARAMS.forEach((p, i) => {
+    const opt = document.createElement('option');
+    opt.value = p.key;
+    opt.textContent = `${p.label} (${p.unit})`;
+    if (i === 0) opt.selected = true;
+    chartParamSelect.appendChild(opt);
+  });
+
+  function buildChartData(key) {
+    // Group records by date (YYYY-MM-DD), average values per day
+    const groups = {};
+    records.forEach(r => {
+      if (!r.savedAt) return;
+      const datePart = r.savedAt.slice(0, 10); // "2026-06-06"
+      const val = parseFloat(r[key]);
+      if (isNaN(val)) return;
+      if (!groups[datePart]) groups[datePart] = { sum: 0, count: 0 };
+      groups[datePart].sum += val;
+      groups[datePart].count++;
+    });
+    const sortedDates = Object.keys(groups).sort();
+    const labels = sortedDates;
+    const data = sortedDates.map(d => +(groups[d].sum / groups[d].count).toFixed(1));
+    return { labels, data };
+  }
+
+  function renderChart() {
+    const key = chartParamSelect.value;
+    if (!key) { trendChartCanvas.style.display = 'none'; chartEmptyEl.style.display = 'block'; chartEmptyEl.textContent = '请选择参数'; return; }
+
+    const { labels, data } = buildChartData(key);
+    if (labels.length < 2) {
+      trendChartCanvas.style.display = 'none';
+      chartEmptyEl.style.display = 'block';
+      chartEmptyEl.textContent = '数据不足 2 天，无法绘制趋势图';
+      return;
+    }
+
+    chartEmptyEl.style.display = 'none';
+    trendChartCanvas.style.display = 'block';
+
+    const p = PARAMS.find(p => p.key === key);
+    const label = p ? `${p.label} (${p.unit})` : key;
+
+    if (trendChartInstance) trendChartInstance.destroy();
+
+    trendChartInstance = new Chart(trendChartCanvas, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [{
+          label,
+          data,
+          borderColor: '#667eea',
+          backgroundColor: 'rgba(102,126,234,0.1)',
+          pointBackgroundColor: '#667eea',
+          pointBorderColor: '#fff',
+          pointBorderWidth: 1,
+          pointRadius: 4,
+          pointHoverRadius: 6,
+          borderWidth: 2,
+          fill: true,
+          tension: 0.3,
+          spanGaps: true,
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { labels: { color: 'rgba(255,255,255,0.6)', font: { size: 12 } } },
+          tooltip: {
+            backgroundColor: 'rgba(30,42,58,0.9)',
+            titleColor: '#fff',
+            bodyColor: 'rgba(255,255,255,0.7)',
+            borderColor: 'rgba(255,255,255,0.1)',
+            borderWidth: 1,
+            cornerRadius: 8,
+            padding: 10,
+          }
+        },
+        scales: {
+          x: {
+            ticks: { color: 'rgba(255,255,255,0.35)', font: { size: 11 } },
+            grid: { color: 'rgba(255,255,255,0.04)' },
+          },
+          y: {
+            ticks: { color: 'rgba(255,255,255,0.35)', font: { size: 11 } },
+            grid: { color: 'rgba(255,255,255,0.06)' },
+          }
+        },
+        interaction: {
+          intersect: false,
+          mode: 'index',
+        }
+      }
+    });
+
+    // Auto-adjust canvas height
+    const minHeight = Math.max(180, Math.min(360, labels.length * 28 + 60));
+    trendChartCanvas.style.maxHeight = minHeight + 'px';
+    trendChartCanvas.parentElement.style.maxHeight = 'none';
+  }
+
+  chartParamSelect.addEventListener('change', renderChart);
+
+  // Rebuild chart data when records change (called from renderRecords too)
+  // ---- end 趋势图 ----
   (async function init() {
     try {
       // 1. Try loading from server (primary)
@@ -1534,6 +1665,7 @@
         updateDashboard();
         renderRecords();
         bindRecordEvents();
+        renderChart();
         return;
       }
     } catch (e) {
@@ -1568,6 +1700,7 @@
         updateDashboard();
         renderRecords();
         bindRecordEvents();
+        renderChart();
         return;
       }
     } catch (e) { /* IndexedDB unavailable */ }
@@ -1588,6 +1721,7 @@
     updateDashboard();
     renderRecords();
     bindRecordEvents();
+    renderChart();
   })();
 </script>
 </body>
