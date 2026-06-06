@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="pragma" content="no-cache">
+<meta http-equiv="expires" content="0">
 <title>冷却系统监测仪表盘</title>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
@@ -561,7 +564,13 @@
   const RECORDS_API = '/api/records';
 
   async function apiGetRecords() {
-    const res = await fetch(RECORDS_API);
+    const res = await fetch(RECORDS_API + '?images=false');
+    if (!res.ok) throw new Error(`加载记录失败: ${res.status}`);
+    return await res.json();
+  }
+
+  async function apiGetRecord(id) {
+    const res = await fetch(`${RECORDS_API}/${id}`);
     if (!res.ok) throw new Error(`加载记录失败: ${res.status}`);
     return await res.json();
   }
@@ -593,6 +602,17 @@
   async function apiClearRecords() {
     const res = await fetch(RECORDS_API, { method: 'DELETE' });
     if (!res.ok) throw new Error(`清除失败: ${res.status}`);
+  }
+
+  /** 按需加载记录的图片数据 */
+  async function ensureImage(r) {
+    if (r._img) return r._img;
+    if (!r._serverId) return null;
+    try {
+      const full = await apiGetRecord(r._serverId);
+      r._img = full._img || null;
+    } catch(e) { r._img = null; }
+    return r._img;
   }
   // ---- end Server API ----
 
@@ -801,7 +821,7 @@
         </div>
         <div class="record-expanded ${isOpen ? 'show' : ''}" data-idx="${actualIdx}">
           ${r._img ? `<div class="record-img"><img src="${r._img}" alt="仪表照片" class="clickable-img" title="点击放大"></div>`
-                   : `<div class="record-img"><div class="no-img">📷 无照片</div></div>`}
+                   : `<div class="record-img"><div class="no-img">${r._serverId ? '📷 加载照片中...' : '📷 无照片'}</div></div>`}
           <div class="params">
             ${PARAMS.map((p, pi) => {
               const val = r[p.key] !== null && r[p.key] !== undefined && r[p.key] !== '' ? r[p.key] : '';
@@ -868,11 +888,16 @@
 
     // Load record data into dashboard
     recordsList.querySelectorAll('.load-to-dash').forEach(btn => {
-      btn.addEventListener('click', (e) => {
+      btn.addEventListener('click', async (e) => {
         e.stopPropagation();
         const idx = parseInt(btn.dataset.idx);
         const r = records[idx];
         if (!r) return;
+        // Load image if needed
+        if (!r._img && r._serverId) {
+          showToast('正在加载照片...');
+          await ensureImage(r);
+        }
         latestData = { ...r };
         // Restore image preview if present
         if (r._img) {
@@ -897,7 +922,7 @@
     });
   }
 
-  function toggleRecordDetail(idx) {
+  async function toggleRecordDetail(idx) {
     if (expandedRecordIndex === idx) {
       expandedRecordIndex = -1;
     } else {
@@ -911,6 +936,20 @@
     // Re-bind events after re-render
     bindRecordEvents();
     searchInput.value = searchQuery;
+
+    // If expanding, load image asynchronously if needed
+    if (expandedRecordIndex >= 0) {
+      const r = records[expandedRecordIndex];
+      if (r && !r._img && r._serverId) {
+        const img = await ensureImage(r);
+        if (img) {
+          // Re-render with the image loaded
+          renderRecords();
+          bindRecordEvents();
+          searchInput.value = searchQuery;
+        }
+      }
+    }
   }
 
   async function deleteRecord(idx) {
@@ -940,7 +979,7 @@
     showToast('已删除');
   }
 
-  function editRecord(idx) {
+  async function editRecord(idx) {
     const r = records[idx];
     if (!r) return;
     // Toggle edit mode
@@ -951,6 +990,10 @@
       expandedRecordIndex = idx;
       // Sync dashboard to this record so image handling is consistent
       latestData = { ...r };
+      // Load image if needed
+      if (!r._img && r._serverId) {
+        await ensureImage(r);
+      }
       // Also restore image preview if the record has one
       if (r._img) {
         pendingImage = r._img;

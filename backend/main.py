@@ -45,11 +45,24 @@ def serialize_record(row):
     return rec
 
 
-def read_all_records():
+def read_all_records(include_images=False):
     conn = sqlite3.connect(DB_PATH)
     rows = conn.execute("SELECT id, data FROM records ORDER BY id").fetchall()
     conn.close()
-    return [serialize_record(r) for r in rows]
+    result = [serialize_record(r) for r in rows]
+    if not include_images:
+        for r in result:
+            r.pop("_img", None)
+    return result
+
+
+def read_one_record(record_id: int):
+    conn = sqlite3.connect(DB_PATH)
+    row = conn.execute("SELECT id, data FROM records WHERE id = ?", (record_id,)).fetchone()
+    conn.close()
+    if row is None:
+        return None
+    return serialize_record(row)
 
 
 @app.on_event("startup")
@@ -177,9 +190,12 @@ async def handle_ocr(
 
 
 @app.get("/api/records")
-def get_records():
-    """获取所有记录（按时间从新到旧排序）"""
-    return read_all_records()
+def get_records(images: bool = False):
+    """
+    获取所有记录（按时间从新到旧排序）。
+    ?images=true 时包含 base64 图片数据（默认不包含，加快列表加载）
+    """
+    return read_all_records(include_images=images)
 
 
 @app.post("/api/records")
@@ -200,6 +216,15 @@ def create_record(data: dict):
     conn.commit()
     conn.close()
     return {"id": record_id, "ok": True}
+
+
+@app.get("/api/records/{record_id}")
+def get_record(record_id: int):
+    """获取单条记录（含图片数据）"""
+    rec = read_one_record(record_id)
+    if rec is None:
+        raise HTTPException(status_code=404, detail="记录不存在")
+    return rec
 
 
 @app.put("/api/records/{record_id}")
