@@ -348,7 +348,28 @@
     pointer-events: none;
   }
   .toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
-  @media (max-width: 500px) {
+  
+  /* ---- Login Modal ---- */
+  .login-modal {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.4);
+    z-index: 1500;
+    display: none;
+    justify-content: center;
+    align-items: center;
+    backdrop-filter: blur(4px);
+  }
+  .login-modal.show { display: flex; }
+  .login-modal-content {
+    background: #fff;
+    border-radius: 16px;
+    padding: 28px 32px;
+    min-width: 320px;
+    max-width: 380px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+    border: 1px solid #e0e3ea;
+  }
+@media (max-width: 500px) {
     .params-grid { grid-template-columns: 1fr; }
     .upload-area { flex-direction: column; }
     .submit-btn { width: 100%; }
@@ -705,9 +726,11 @@
     <h1>冷却系统监测仪表盘</h1>
     <div class="sub" id="dateDisplay"></div>
     <div class="time" id="recordCount">暂无监测数据</div>
-    <div style="display:flex;justify-content:center;align-items:center;gap:6px;margin-top:6px;font-size:11px">
+    <div style="display:flex;justify-content:center;align-items:center;gap:10px;margin-top:6px;font-size:11px">
       <span class="status-dot warn" id="serverStatusDot" title="离线模式"></span>
       <span id="serverStatusLabel" style="color:#aaa">检测中...</span>
+      <span style="color:#ddd">|</span>
+      <span id="authStatus" style="color:#667eea;cursor:pointer;font-weight:500">管理员登录</span>
     </div>
   </div>
 
@@ -829,6 +852,19 @@
     <button class="confirm-import" id="confirmImport">确认导入</button>
   </div>
 </div>
+
+<div class="login-modal" id="loginModal">
+  <div class="login-modal-content">
+    <h3 style="color:#333;font-size:16px;margin-bottom:16px">🔐 管理员登录</h3>
+    <input type="password" id="loginPasswordInput" placeholder="输入管理员密码" style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid #e0e3ea;background:#fafbfc;color:#333;font-size:14px;outline:none;box-sizing:border-box">
+    <div style="display:flex;gap:10px;margin-top:14px">
+      <button id="loginCancelBtn" style="flex:1;padding:10px;border-radius:10px;border:1px solid #e0e3ea;background:#f8f9fc;color:#666;font-size:13px;cursor:pointer;font-weight:500">取消</button>
+      <button id="loginConfirmBtn" style="flex:1;padding:10px;border-radius:10px;border:none;background:#667eea;color:#fff;font-size:13px;cursor:pointer;font-weight:600">登录</button>
+    </div>
+    <div id="loginError" style="color:#e74c3c;font-size:12px;margin-top:10px;display:none"></div>
+  </div>
+</div>
+
 <div class="img-viewer" id="imgViewer">
   <button class="close-viewer" id="closeViewer">✕</button>
   <img id="viewerImg" src="" alt="放大查看">
@@ -871,7 +907,7 @@
   async function apiCreateRecord(data) {
     const res = await fetch(RECORDS_API, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
       body: JSON.stringify(data),
     });
     if (!res.ok) throw new Error(`保存失败: ${res.status}`);
@@ -881,19 +917,19 @@
   async function apiUpdateRecord(id, data) {
     const res = await fetch(`${RECORDS_API}/${id}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
       body: JSON.stringify(data),
     });
     if (!res.ok) throw new Error(`更新失败: ${res.status}`);
   }
 
   async function apiDeleteRecord(id) {
-    const res = await fetch(`${RECORDS_API}/${id}`, { method: 'DELETE' });
+    const res = await fetch(`${RECORDS_API}/${id}`, { method: 'DELETE', headers: authHeaders() });
     if (!res.ok) throw new Error(`删除失败: ${res.status}`);
   }
 
   async function apiClearRecords() {
-    const res = await fetch(RECORDS_API, { method: 'DELETE' });
+    const res = await fetch(RECORDS_API, { method: 'DELETE', headers: authHeaders() });
     if (!res.ok) throw new Error(`清除失败: ${res.status}`);
   }
 
@@ -951,6 +987,82 @@
   let expandedRecordIndex = -1;      // which record's detail panel is open
   let searchQuery = '';
   let currentPage = 1;
+  let isAdmin = false;
+
+  // ---- Auth ----
+  async function checkAuth() {
+    const token = localStorage.getItem('admin_token');
+    if (!token) { isAdmin = false; updateAuthUI(); return; }
+    try {
+      const res = await fetch('/api/auth/verify', {
+        headers: { 'Authorization': 'Bearer ' + token }
+      });
+      const data = await res.json();
+      isAdmin = data.valid === true;
+      if (!isAdmin) localStorage.removeItem('admin_token');
+    } catch(e) { isAdmin = false; }
+    updateAuthUI();
+  }
+
+  function updateAuthUI() {
+    const el = document.getElementById('authStatus');
+    if (!el) return;
+    if (isAdmin) {
+      el.textContent = '管理员 (点击退出)';
+      el.style.color = '#27ae60';
+    } else {
+      el.textContent = '管理员登录';
+      el.style.color = '#667eea';
+    }
+    // Show/hide admin-only UI
+    document.getElementById('saveBtn').style.display = isAdmin ? '' : 'none';
+    document.getElementById('uploadBtn').style.display = isAdmin ? '' : 'none';
+    document.getElementById('removeImgBtn').style.display = isAdmin ? '' : 'none';
+    document.getElementById('analyzeBtn').style.display = isAdmin ? '' : 'none';
+    document.getElementById('manualApplyBtn').style.display = isAdmin ? '' : 'none';
+    document.getElementById('clearBtn').style.display = isAdmin ? '' : 'none';
+    document.getElementById('importBtn').style.display = isAdmin ? '' : 'none';
+  }
+
+  // ---- Auth API ----
+  async function apiLogin(password) {
+    const res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password })
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || '登录失败');
+    }
+    const data = await res.json();
+    localStorage.setItem('admin_token', data.token);
+    isAdmin = true;
+    updateAuthUI();
+    return data;
+  }
+
+  async function apiLogout() {
+    const token = localStorage.getItem('admin_token');
+    if (token) {
+      try {
+        await fetch('/api/auth/logout', {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + token }
+        });
+      } catch(e) {}
+      localStorage.removeItem('admin_token');
+    }
+    isAdmin = false;
+    updateAuthUI();
+  }
+
+  /** 给 fetch 请求添加管理令牌头（如果存在） */
+  function authHeaders() {
+    const token = localStorage.getItem('admin_token');
+    if (token) return { 'Authorization': 'Bearer ' + token };
+    return {};
+  }
   const PAGE_SIZE = 10;
 
   const toast = document.getElementById('toast');
@@ -1047,6 +1159,7 @@
   }
 
   function editParamValue(idx) {
+    if (!isAdmin) { showToast('需要管理员权限'); return; }
     const p = PARAMS[idx];
     const valEl = document.getElementById(`val_${idx}`);
     const current = latestData ? latestData[p.key] : '';
@@ -1133,7 +1246,7 @@
       renderPagination(0);
       return;
     }
-    clearBtn.style.display = 'block';
+    clearBtn.style.display = isAdmin ? 'block' : 'none';
 
     const filtered = searchQuery
       ? records.filter(r => {
@@ -1183,8 +1296,8 @@
           <span class="time">${r.savedAt || '--'}</span>
           <span class="vals"><span>${summaryVals || '(空)'}${summaryVals && PARAMS.some(p => r[p.key] !== null && r[p.key] !== undefined && r[p.key] !== '') ? ' …' : ''}</span></span>
           <span class="record-actions">
-            <button class="record-action-btn edit" data-action="edit" data-idx="${actualIdx}" title="编辑">✏️</button>
-            <button class="record-action-btn delete" data-action="delete" data-idx="${actualIdx}" title="删除">🗑️</button>
+            ${isAdmin ? `<button class="record-action-btn edit" data-action="edit" data-idx="${actualIdx}" title="编辑">✏️</button>
+            <button class="record-action-btn delete" data-action="delete" data-idx="${actualIdx}" title="删除">🗑️</button>` : ''}
             <button class="record-action-btn toggle-detail" data-action="toggle" data-idx="${actualIdx}" title="展开详情">${isOpen ? '▲' : '▼'}</button>
           </span>
         </div>
@@ -1321,6 +1434,7 @@
 
   async function deleteRecord(idx) {
     if (!recordsReady) { showToast('正在加载数据，请稍后...'); return; }
+    if (!isAdmin) { showToast('需要管理员权限'); return; }
     const r = records[idx];
     if (!r) return;
     if (!confirm(`确认删除 ${r.savedAt || '--'} 这条记录？`)) return;
@@ -1381,6 +1495,7 @@
   }
 
   async function saveRecordEdit(idx) {
+    if (!isAdmin) { showToast('需要管理员权限'); return; }
     const r = records[idx];
     if (!r) return;
     const wrapper = document.querySelector(`.record-item-wrapper.editing`);
@@ -1652,7 +1767,7 @@
   }
 
   exportBtn.addEventListener('click', exportToExcel);
-  importBtn.addEventListener('click', () => { if (recordsReady) excelInput.click(); else showToast('正在加载数据，请稍后...'); });
+  importBtn.addEventListener('click', () => { if (!isAdmin) { showToast('需要管理员权限'); return; } if (recordsReady) excelInput.click(); else showToast('正在加载数据，请稍后...'); });
   excelInput.addEventListener('change', handleImportFile);
   confirmImport.addEventListener('click', confirmImportAction);
   cancelImport.addEventListener('click', cancelImportAction);
@@ -1804,6 +1919,7 @@
   });
 
   saveBtn.addEventListener('click', async () => {
+    if (!isAdmin) { showToast('需要管理员权限'); return; }
     if (!recordsReady) { showToast('正在加载数据，请稍后...'); return; }
     if (!latestData) {
       showToast('暂无数据，请先上传图片');
@@ -1859,6 +1975,7 @@
   });
 
   clearBtn.addEventListener('click', async () => {
+    if (!isAdmin) { showToast('需要管理员权限'); return; }
     if (!recordsReady) { showToast('正在加载数据，请稍后...'); return; }
     if (!confirm('确认清除所有历史记录？')) return;
     // Clear server records (if online)
@@ -1880,6 +1997,66 @@
     showToast('已清除所有记录');
   });
 
+  // ---- Auth: Login / Logout handlers ----
+  const authStatusEl = document.getElementById('authStatus');
+  const loginModal = document.getElementById('loginModal');
+  const loginPassInput = document.getElementById('loginPasswordInput');
+  const loginConfirmBtn = document.getElementById('loginConfirmBtn');
+  const loginCancelBtn = document.getElementById('loginCancelBtn');
+  const loginError = document.getElementById('loginError');
+
+  if (authStatusEl) {
+    authStatusEl.addEventListener('click', async () => {
+      if (isAdmin) {
+        if (confirm('确认退出管理员模式？')) await apiLogout();
+      } else {
+        loginModal.classList.add('show');
+        loginPassInput.value = '';
+        loginError.style.display = 'none';
+        setTimeout(() => loginPassInput.focus(), 100);
+      }
+    });
+  }
+  if (loginConfirmBtn) {
+    loginConfirmBtn.addEventListener('click', async () => {
+      const pwd = loginPassInput.value.trim();
+      if (!pwd) { loginError.textContent = '请输入密码'; loginError.style.display = 'block'; return; }
+      try {
+        await apiLogin(pwd);
+        loginModal.classList.remove('show');
+        showToast('管理员登录成功');
+        renderRecords();
+        bindRecordEvents();
+      } catch(e) {
+        loginError.textContent = e.message || '密码错误';
+        loginError.style.display = 'block';
+        loginPassInput.value = '';
+        loginPassInput.focus();
+      }
+    });
+  }
+  if (loginCancelBtn) {
+    loginCancelBtn.addEventListener('click', () => {
+      loginModal.classList.remove('show');
+      loginError.style.display = 'none';
+    });
+  }
+  if (loginPassInput) {
+    loginPassInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && loginConfirmBtn) loginConfirmBtn.click();
+      if (e.key === 'Escape' && loginCancelBtn) loginCancelBtn.click();
+    });
+  }
+  // Close modal on backdrop click
+  if (loginModal) {
+    loginModal.addEventListener('click', (e) => {
+      if (e.target === loginModal) {
+        loginModal.classList.remove('show');
+        loginError.style.display = 'none';
+      }
+    });
+  }
+
   document.getElementById('manualCard').style.display = 'block';
 
   document.querySelectorAll('.manual-input').forEach(inp => {
@@ -1892,6 +2069,7 @@
   });
 
   document.getElementById('manualApplyBtn').addEventListener('click', () => {
+    if (!isAdmin) { showToast('需要管理员权限'); return; }
     if (!latestData) latestData = { savedAt: '', ...Object.fromEntries(PARAMS.map(p => [p.key, ''])) };
     let count = 0;
     document.querySelectorAll('.manual-input').forEach(inp => {
@@ -2026,6 +2204,7 @@
   // ---- end 趋势图 ----
   (async function init() {
     try {
+      await checkAuth();
       // 1. Try loading from server (primary)
       const serverRecords = await apiGetRecords();
       if (Array.isArray(serverRecords) && serverRecords.length > 0) {

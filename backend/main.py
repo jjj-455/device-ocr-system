@@ -8,10 +8,11 @@ import json
 import tempfile
 import traceback
 import sqlite3
-from datetime import datetime
+import secrets
+from datetime import datetime, timedelta
 from pathlib import Path
 
-from fastapi import FastAPI, File, Form, UploadFile, HTTPException
+from fastapi import FastAPI, File, Form, UploadFile, HTTPException, Header, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -19,7 +20,25 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from ocr_engine import recognize as ocr_recognize
 from templates import templates
 
-app = FastAPI(title="设备点检数字系统 OCR API", version="1.1.0")
+app = FastAPI(title="设备点检数字系统 OCR API", version="1.2.0")
+
+# ---- 管理员认证 ----
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin123")
+_admin_tokens = {}  # token -> expiry datetime
+
+
+def verify_admin(authorization: str = Header(None)):
+    """验证 Bearer token"""
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="未登录")
+    token = authorization[7:]
+    expiry = _admin_tokens.get(token)
+    if not expiry or datetime.now() > expiry:
+        if token in _admin_tokens:
+            del _admin_tokens[token]
+        raise HTTPException(status_code=401, detail="登录已过期，请重新登录")
+    return True
+
 
 # ---- SQLite 数据库 ----
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "records.db")
@@ -186,6 +205,43 @@ async def handle_ocr(
         )
 
 
+# ===== 管理员认证 API =====
+
+
+@app.post("/api/auth/login")
+def auth_login(data: dict):
+    """管理员登录，返回 token"""
+    pwd = data.get("password", "")
+    if not pwd or pwd != ADMIN_PASSWORD:
+        raise HTTPException(status_code=401, detail="密码错误")
+    token = secrets.token_hex(32)
+    _admin_tokens[token] = datetime.now() + timedelta(hours=24)
+    return {"token": token, "admin": True, "expires_in": 86400}
+
+
+@app.post("/api/auth/logout")
+def auth_logout(authorization: str = Header(None)):
+    """退出登录"""
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization[7:]
+        _admin_tokens.pop(token, None)
+    return {"ok": True}
+
+
+@app.get("/api/auth/verify")
+def auth_verify(authorization: str = Header(None)):
+    """验证 token 是否有效"""
+    if not authorization or not authorization.startswith("Bearer "):
+        return {"valid": False, "admin": False}
+    token = authorization[7:]
+    expiry = _admin_tokens.get(token)
+    if not expiry or datetime.now() > expiry:
+        if token in _admin_tokens:
+            del _admin_tokens[token]
+        return {"valid": False, "admin": False}
+    return {"valid": True, "admin": True}
+
+
 # ===== 记录 API（跨设备共享数据） =====
 
 
@@ -199,9 +255,9 @@ def get_records(images: bool = False):
 
 
 @app.post("/api/records")
-def create_record(data: dict):
+def create_record(data: dict, _=Depends(verify_admin)):
     """
-    创建新记录。
+    创建新记录（需要管理员权限）。
     请求体示例: {"savedAt": "2026-06-06 10:30", "waterFlow": "130.5", ...}
     支持 _img 字段（base64 数据 URL）
     """
@@ -228,8 +284,8 @@ def get_record(record_id: int):
 
 
 @app.put("/api/records/{record_id}")
-def update_record(record_id: int, data: dict):
-    """更新指定记录"""
+def update_record(record_id: int, data: dict, _=Depends(verify_admin)):
+    """更新指定记录（需要管理员权限）"""
     conn = sqlite3.connect(DB_PATH)
     row = conn.execute("SELECT id FROM records WHERE id = ?", (record_id,)).fetchone()
     if row is None:
@@ -246,8 +302,8 @@ def update_record(record_id: int, data: dict):
 
 
 @app.delete("/api/records/{record_id}")
-def delete_record(record_id: int):
-    """删除指定记录"""
+def delete_record(record_id: int, _=Depends(verify_admin)):
+    """删除指定记录（需要管理员权限）"""
     conn = sqlite3.connect(DB_PATH)
     row = conn.execute("SELECT id FROM records WHERE id = ?", (record_id,)).fetchone()
     if row is None:
@@ -260,8 +316,8 @@ def delete_record(record_id: int):
 
 
 @app.delete("/api/records")
-def clear_records():
-    """清空所有记录"""
+def clear_records(_=Depends(verify_admin)):
+    """清空所有记录（需要管理员权限）"""
     conn = sqlite3.connect(DB_PATH)
     conn.execute("DELETE FROM records")
     conn.commit()
