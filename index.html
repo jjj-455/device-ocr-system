@@ -438,6 +438,10 @@
     <h1>冷却系统监测仪表盘</h1>
     <div class="sub" id="dateDisplay"></div>
     <div class="time" id="recordCount">暂无监测数据</div>
+    <div style="display:flex;justify-content:center;align-items:center;gap:6px;margin-top:6px;font-size:11px">
+      <span class="status-dot warn" id="serverStatusDot" title="离线模式"></span>
+      <span id="serverStatusLabel" style="color:rgba(243,156,18,0.6)">检测中...</span>
+    </div>
   </div>
 
   <div class="card">
@@ -577,9 +581,17 @@
   const RECORDS_API = '/api/records';
 
   async function apiGetRecords() {
-    const res = await fetch(RECORDS_API + '?images=false');
-    if (!res.ok) throw new Error(`加载记录失败: ${res.status}`);
-    return await res.json();
+    try {
+      const res = await fetch(RECORDS_API + '?images=false');
+      if (!res.ok) throw new Error(`加载记录失败: ${res.status}`);
+      serverOnline = true;
+      updateOnlineStatus();
+      return await res.json();
+    } catch (e) {
+      serverOnline = false;
+      updateOnlineStatus();
+      return null;
+    }
   }
 
   async function apiGetRecord(id) {
@@ -628,6 +640,40 @@
     return r._img;
   }
   // ---- end Server API ----
+
+  // ---- Offline fallback storage ----
+  let serverOnline = false;       // true after successful server API call
+  let _serverCheckInited = false; // prevents repeated checks
+
+  function _saveRecordsToLocal() {
+    try { localStorage.setItem('cooling_records_offline', JSON.stringify(records)); } catch(e) {}
+  }
+
+  function _loadRecordsFromLocal() {
+    try {
+      const data = JSON.parse(localStorage.getItem('cooling_records_offline') || 'null');
+      if (Array.isArray(data)) return data;
+    } catch(e) {}
+    return null;
+  }
+
+  function updateOnlineStatus() {
+    const dot = document.getElementById('serverStatusDot');
+    const label = document.getElementById('serverStatusLabel');
+    if (!dot || !label) return;
+    if (serverOnline) {
+      dot.className = 'status-dot ok';
+      dot.title = '已连接服务器';
+      label.textContent = '在线';
+      label.style.color = 'rgba(255,255,255,0.3)';
+    } else {
+      dot.className = 'status-dot warn';
+      dot.title = '离线模式 — 数据仅保存在本地浏览器';
+      label.textContent = '离线';
+      label.style.color = 'rgba(243,156,18,0.6)';
+    }
+  }
+  // ---- end Offline fallback ----
 
   let latestData = JSON.parse(localStorage.getItem('cooling_latest') || 'null');
   let records = [];
@@ -970,11 +1016,12 @@
     const r = records[idx];
     if (!r) return;
     if (!confirm(`确认删除 ${r.savedAt || '--'} 这条记录？`)) return;
-    // Delete from server first
-    if (r._serverId) {
-      try { await apiDeleteRecord(r._serverId); } catch (e) { showToast('删除失败: ' + e.message); return; }
+    // Delete from server first (if online)
+    if (serverOnline && r._serverId) {
+      try { await apiDeleteRecord(r._serverId); } catch (e) { serverOnline = false; updateOnlineStatus(); }
     }
     records.splice(idx, 1);
+    _saveRecordsToLocal();
     if (editingRecordIndex === idx) editingRecordIndex = -1;
     if (expandedRecordIndex === idx) expandedRecordIndex = -1;
     if (editingRecordIndex > idx) editingRecordIndex--;
@@ -1048,10 +1095,11 @@
       // Sync dashboard to reflect changes (including the image)
       latestData = { ...r };
       saveDash();
-      // Update server
-      if (r._serverId) {
-        try { await apiUpdateRecord(r._serverId, r); } catch (e) { showToast('更新失败: ' + e.message); return; }
+      // Update server (if online)
+      if (serverOnline && r._serverId) {
+        try { await apiUpdateRecord(r._serverId, r); } catch (e) { serverOnline = false; updateOnlineStatus(); }
       }
+      _saveRecordsToLocal();
       updateDashboard();
       showToast('已更新');
     } else {
@@ -1264,17 +1312,20 @@
   async function confirmImportAction() {
     if (_pendingImportRecords.length === 0) return;
     showToast('正在导入到服务器...');
-    // Upload each record to server
+    // Upload each record to server if online, otherwise save locally
     for (const r of _pendingImportRecords) {
-      try {
-        const result = await apiCreateRecord(r);
-        r._serverId = result.id;
-      } catch (e) {
-        showToast('导入部分失败: ' + e.message);
-        break;
+      if (serverOnline) {
+        try {
+          const result = await apiCreateRecord(r);
+          r._serverId = result.id;
+        } catch (e) {
+          serverOnline = false;
+          updateOnlineStatus();
+        }
       }
     }
     records.push(..._pendingImportRecords);
+    _saveRecordsToLocal();
     if (records.length > 2000) records = records.slice(-2000);
     _pendingImportRecords = [];
     importSummary.classList.remove('show');
@@ -1464,27 +1515,34 @@
       // Update existing record
       const r = records[editingRecordIndex];
       Object.assign(r, latestData);
-      // Update server
-      if (r._serverId) {
-        try { await apiUpdateRecord(r._serverId, r); } catch (e) { showToast('更新失败: ' + e.message); return; }
+      // Update server (if online)
+      if (serverOnline && r._serverId) {
+        try { await apiUpdateRecord(r._serverId, r); } catch (e) { serverOnline = false; updateOnlineStatus(); }
       }
       editingRecordIndex = -1;
       showToast('记录已更新');
     } else {
-      // Create new record (upload to server first)
+      // Create new record (try server first, fall back to local)
       const recordData = { ...latestData };
-      try {
-        const result = await apiCreateRecord(recordData);
-        recordData._serverId = result.id;
-      } catch (e) {
-        showToast('保存失败: ' + e.message);
-        return;
+      if (serverOnline) {
+        try {
+          const result = await apiCreateRecord(recordData);
+          recordData._serverId = result.id;
+        } catch (e) {
+          serverOnline = false;
+          updateOnlineStatus();
+        }
+      }
+      // If still not online after attempt (or was offline), save locally
+      if (!serverOnline && !recordData._serverId) {
+        showToast('离线模式 — 数据仅保存在本地');
       }
       records.push(recordData);
       if (records.length > 2000) records = records.slice(-2000);
       showToast('记录已保存');
     }
     saveDash();
+    _saveRecordsToLocal();
     updateDashboard();
     renderRecords();
     bindRecordEvents();
@@ -1495,8 +1553,10 @@
   clearBtn.addEventListener('click', async () => {
     if (!recordsReady) { showToast('正在加载数据，请稍后...'); return; }
     if (!confirm('确认清除所有历史记录？')) return;
-    // Clear server records
-    try { await apiClearRecords(); } catch (e) { showToast('清除失败: ' + e.message); return; }
+    // Clear server records (if online)
+    if (serverOnline) {
+      try { await apiClearRecords(); } catch (e) { serverOnline = false; updateOnlineStatus(); }
+    }
     records = [];
     editingRecordIndex = -1;
     expandedRecordIndex = -1;
@@ -1504,6 +1564,7 @@
     pendingImage = null;
     imgPreview.classList.remove('show');
     saveDash();
+    _saveRecordsToLocal();
     renderRecords();
     bindRecordEvents();
     updateDashboard();
@@ -1661,6 +1722,8 @@
       const serverRecords = await apiGetRecords();
       if (Array.isArray(serverRecords) && serverRecords.length > 0) {
         records = serverRecords;
+        // Also write to local cache
+        _saveRecordsToLocal();
         recordsReady = true;
         updateDashboard();
         renderRecords();
@@ -1672,9 +1735,20 @@
       console.warn('Server unavailable, will try offline storage:', e);
     }
 
-    // 2. Offline fallback: migrate old records from IndexedDB / localStorage
+    // 2. Try offline localStorage (v1.1+)
+    const localRecords = _loadRecordsFromLocal();
+    if (Array.isArray(localRecords) && localRecords.length > 0) {
+      records = localRecords;
+      recordsReady = true;
+      updateDashboard();
+      renderRecords();
+      bindRecordEvents();
+      renderChart();
+      return;
+    }
+
+    // 3. Legacy fallback: migrate old records from IndexedDB
     try {
-      // Try IndexedDB (old primary storage pre-v1.1)
       const stored = await new Promise((resolve) => {
         const req = indexedDB.open('cooling_monitor_db');
         req.onsuccess = (e) => {
@@ -1690,12 +1764,14 @@
         req.onerror = () => resolve(null);
       });
       if (Array.isArray(stored) && stored.length > 0) {
-        // Upload to server
-        for (const r of stored) {
-          try { const result = await apiCreateRecord(r); r._serverId = result.id; } catch(e) {}
-        }
         records = stored;
-        localStorage.setItem('cooling_records', '[]');
+        _saveRecordsToLocal();
+        // Try to upload to server
+        for (const r of records) {
+          if (serverOnline) {
+            try { const result = await apiCreateRecord(r); r._serverId = result.id; } catch(e) { serverOnline = false; updateOnlineStatus(); }
+          }
+        }
         recordsReady = true;
         updateDashboard();
         renderRecords();
@@ -1705,15 +1781,18 @@
       }
     } catch (e) { /* IndexedDB unavailable */ }
 
-    // 3. Try old localStorage records as last resort
+    // 4. Try old localStorage records as last resort
     try {
       const legacy = JSON.parse(localStorage.getItem('cooling_records') || '[]');
       if (Array.isArray(legacy) && legacy.length > 0) {
-        for (const r of legacy) {
-          try { const result = await apiCreateRecord(r); r._serverId = result.id; } catch(e) {}
-        }
         records = legacy;
+        _saveRecordsToLocal();
         localStorage.removeItem('cooling_records');
+        for (const r of records) {
+          if (serverOnline) {
+            try { const result = await apiCreateRecord(r); r._serverId = result.id; } catch(e) { serverOnline = false; updateOnlineStatus(); }
+          }
+        }
       }
     } catch(e) {}
 
