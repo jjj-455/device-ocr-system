@@ -430,6 +430,312 @@
     line-height: 1;
   }
   .img-viewer .close-viewer:hover { color: #fff; }
+
+  /* ---- Pagination ---- */
+  .pagination { display: flex; justify-content: center; align-items: center; gap: 4px; margin-top: 14px; padding: 4px 0; }
+  .page-btn {
+    min-width: 34px; height: 34px;
+    border-radius: 8px;
+    border: 1px solid rgba(255,255,255,0.08);
+    background: rgba(255,255,255,0.04);
+    color: rgba(255,255,255,0.5);
+    font-size: 13px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.2s;
+    padding: 0 8px;
+  }
+  .page-btn:hover { background: rgba(102,126,234,0.2); border-color: rgba(102,126,234,0.3); color: #8ea4f0; }
+  .page-btn.active { background: #667eea; border-color: #667eea; color: #fff; font-weight: 600; }
+  .page-btn:disabled { opacity: 0.2; cursor: default; background: none; border-color: rgba(255,255,255,0.04); }
+  .page-btn:disabled:hover { background: none; border-color: rgba(255,255,255,0.04); color: rgba(255,255,255,0.5); }
+  .page-info { font-size: 12px; color: rgba(255,255,255,0.25); margin: 0 8px; white-space: nowrap; }
+
+  /* ---- Enhanced card ---- */
+  .card { transition: transform 0.2s, box-shadow 0.3s, border-color 0.3s; }
+  .card:hover { box-shadow: 0 4px 24px rgba(0,0,0,0.2); border-color: rgba(255,255,255,0.12); }
+  .card-title { font-weight: 600; }
+  .card-title .badge {
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: rgba(102,126,234,0.2);
+    color: #8ea4f0;
+    font-weight: 400;
+    margin-left: auto;
+    letter-spacing: 0;
+    text-transform: none;
+  }
+
+  /* ---- Enhanced param cards ---- */
+  .param-card {
+    position: relative;
+    overflow: hidden;
+    transition: all 0.3s;
+  }
+  .param-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0;
+    width: 3px; height: 100%;
+    border-radius: 3px 0 0 3px;
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+  .param-card:hover::before { opacity: 1; }
+  .param-card:hover {
+    border-color: rgba(102,126,234,0.3);
+    background: rgba(255,255,255,0.08);
+    transform: translateY(-1px);
+  }
+  .param-value {
+    font-size: 26px;
+    letter-spacing: -0.5px;
+    background: linear-gradient(135deg, #fff 60%, rgba(255,255,255,0.7));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .param-value input { -webkit-text-fill-color: #fff; }
+  .param-label { font-weight: 500; letter-spacing: 0.3px; }
+
+  /* ---- Enhanced upload area ---- */
+  .upload-btn {
+    position: relative;
+    overflow: hidden;
+  }
+  .upload-btn::after {
+    content: '';
+    position: absolute;
+    top: -50%; left: -50%;
+    width: 200%; height: 200%;
+    background: radial-gradient(circle, rgba(102,126,234,0.05) 0%, transparent 60%);
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+  .upload-btn:hover::after { opacity: 1; }
+  .submit-btn { letter-spacing: 0.5px; }
+  .submit-btn:active { transform: scale(0.97); }
+
+  /* ---- Enhanced records list ---- */
+  .record-item-wrapper {
+    border-radius: 12px;
+    overflow: hidden;
+    transition: all 0.3s;
+    margin-bottom: 6px;
+    border: 1px solid rgba(255,255,255,0.04);
+  }
+  .record-item-wrapper:hover { border-color: rgba(255,255,255,0.1); background: rgba(255,255,255,0.02); }
+  .record-item-wrapper.editing { border-color: rgba(102,126,234,0.4); background: rgba(102,126,234,0.06); }
+  .record-item {
+    padding: 12px 14px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    transition: background 0.2s;
+  }
+  .record-item .idx {
+    color: rgba(255,255,255,0.12);
+    font-size: 11px;
+    min-width: 30px;
+    font-weight: 600;
+  }
+  .record-item .time {
+    color: rgba(255,255,255,0.5);
+    font-size: 12px;
+    min-width: 130px;
+    font-weight: 500;
+  }
+  .record-item .vals {
+    flex: 1;
+    font-size: 12px;
+    color: rgba(255,255,255,0.4);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .record-item .vals span { color: rgba(255,255,255,0.6); }
+  .record-actions {
+    display: flex;
+    gap: 2px;
+    flex-shrink: 0;
+    opacity: 0.3;
+    transition: opacity 0.3s;
+  }
+  .record-item-wrapper:hover .record-actions { opacity: 1; }
+  .record-action-btn {
+    width: 30px; height: 30px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 8px;
+    border: none;
+    background: rgba(255,255,255,0.04);
+    color: rgba(255,255,255,0.4);
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s;
+  }
+  .record-action-btn:hover { background: rgba(255,255,255,0.1); }
+  .record-action-btn.edit:hover { color: #667eea; background: rgba(102,126,234,0.15); }
+  .record-action-btn.delete:hover { color: #e74c3c; background: rgba(231,76,60,0.15); }
+
+  /* ---- Enhanced expanded record ---- */
+  .record-expanded {
+    padding: 14px 16px;
+    background: rgba(0,0,0,0.15);
+    border-top: 1px solid rgba(255,255,255,0.04);
+  }
+  .record-expanded .params {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px 20px;
+  }
+  .record-expanded .params .item {
+    display: flex;
+    justify-content: space-between;
+    padding: 6px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.03);
+    font-size: 12px;
+    color: rgba(255,255,255,0.45);
+  }
+  .record-expanded .params .item .v { color: rgba(255,255,255,0.75); font-weight: 600; }
+  .record-expanded .params .item input {
+    width: 90px; padding: 3px 8px; border-radius: 6px;
+    border: 1px solid rgba(102,126,234,0.3);
+    background: rgba(0,0,0,0.2);
+    color: #fff; font-size: 12px; font-weight: 600; text-align: right;
+    outline: none;
+  }
+  .record-expanded .params .item input:focus { border-color: #667eea; box-shadow: 0 0 0 2px rgba(102,126,234,0.1); }
+
+  .edit-actions { display: flex; gap: 8px; margin-top: 12px; }
+  .edit-actions button {
+    flex: 1; padding: 8px 12px; border-radius: 8px;
+    border: none; font-size: 12px; cursor: pointer; font-weight: 600;
+    transition: all 0.2s;
+  }
+  .edit-actions button:hover { transform: translateY(-1px); }
+  .edit-actions button:active { transform: translateY(0); }
+  .edit-actions button.save-edit { background: #667eea; color: #fff; }
+  .edit-actions button.cancel-edit { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.5); }
+  .edit-actions button.cancel-edit:hover { background: rgba(255,255,255,0.12); }
+
+  .load-to-dash-btn {
+    width: 100%;
+    padding: 8px;
+    border-radius: 8px;
+    border: 1px solid rgba(102,126,234,0.2);
+    background: rgba(102,126,234,0.1);
+    color: #8ea4f0;
+    font-size: 12px;
+    cursor: pointer;
+    font-weight: 500;
+    transition: all 0.2s;
+    text-align: center;
+  }
+  .load-to-dash-btn:hover { background: rgba(102,126,234,0.2); border-color: rgba(102,126,234,0.4); }
+
+  /* ---- Enhanced io buttons ---- */
+  .io-row { display: flex; gap: 8px; margin-top: 12px; }
+  .io-row .io-btn {
+    flex: 1; padding: 9px; border-radius: 10px;
+    font-size: 12px; cursor: pointer; font-weight: 500;
+    transition: all 0.2s; text-align: center;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.06);
+    color: rgba(255,255,255,0.45);
+  }
+  .io-row .io-btn:hover { background: rgba(255,255,255,0.08); }
+  .io-row .io-btn.import-btn { border-color: rgba(102,126,234,0.2); color: #8ea4f0; }
+  .io-row .io-btn.import-btn:hover { background: rgba(102,126,234,0.1); }
+  .io-row .io-btn.export-btn { border-color: rgba(39,174,96,0.2); color: #5dd68b; }
+  .io-row .io-btn.export-btn:hover { background: rgba(39,174,96,0.1); }
+
+  /* ---- Clear button ---- */
+  .clear-btn {
+    margin-top: 6px;
+    padding: 7px;
+    background: none;
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 10px;
+    color: rgba(255,255,255,0.25);
+    font-size: 12px;
+    cursor: pointer;
+    width: 100%;
+    transition: all 0.2s;
+  }
+  .clear-btn:hover { color: #e74c3c; border-color: rgba(231,76,60,0.3); background: rgba(231,76,60,0.04); }
+
+  /* ---- Search bar ---- */
+  .search-bar { display: flex; gap: 8px; margin-bottom: 12px; }
+  .search-bar input {
+    flex: 1;
+    padding: 8px 14px; border-radius: 10px;
+    border: 1px solid rgba(255,255,255,0.06);
+    background: rgba(255,255,255,0.04);
+    color: rgba(255,255,255,0.6); font-size: 12px;
+    outline: none; transition: all 0.2s;
+  }
+  .search-bar input:focus { border-color: rgba(102,126,234,0.3); background: rgba(102,126,234,0.04); }
+  .search-bar input::placeholder { color: rgba(255,255,255,0.15); }
+
+  /* ---- Manual inputs ---- */
+  .manual-group { display: flex; flex-direction: column; gap: 3px; }
+  .manual-group .unit-label {
+    font-size: 11px; color: rgba(255,255,255,0.35);
+    padding-left: 2px;
+  }
+  .manual-group .unit-label .unit-tag { color: rgba(255,255,255,0.15); margin-left: 2px; }
+  .manual-group input {
+    padding: 9px 12px; border-radius: 8px;
+    border: 1px solid rgba(255,255,255,0.08);
+    background: rgba(255,255,255,0.05);
+    color: #fff; font-size: 13px; outline: none;
+    transition: all 0.2s;
+  }
+  .manual-group input:focus { border-color: rgba(102,126,234,0.4); background: rgba(102,126,234,0.05); }
+  .manual-group input::placeholder { color: rgba(255,255,255,0.12); }
+
+  /* ---- Toast enhancement ---- */
+  .toast {
+    position: fixed;
+    top: 24px;
+    left: 50%;
+    transform: translateX(-50%) translateY(-100px);
+    background: rgba(30,42,58,0.95);
+    backdrop-filter: blur(12px);
+    color: #fff;
+    padding: 12px 28px;
+    border-radius: 12px;
+    font-size: 14px;
+    font-weight: 500;
+    opacity: 0;
+    transition: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+    z-index: 999;
+    pointer-events: none;
+    border: 1px solid rgba(255,255,255,0.1);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+  }
+  .toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+
+  /* ---- Mobile refinements ---- */
+  @media (max-width: 500px) {
+    body { padding: 12px; }
+    .card { padding: 16px; border-radius: 14px; }
+    .params-grid { grid-template-columns: 1fr; }
+    .upload-area { flex-direction: column; }
+    .submit-btn { width: 100%; }
+    .param-value { font-size: 22px; }
+    .header h1 { font-size: 18px; }
+    .record-item { flex-wrap: wrap; gap: 6px; }
+    .record-item .time { min-width: auto; font-size: 11px; }
+    .record-item .idx { display: none; }
+    .record-actions { opacity: 0.6; }
+    .record-expanded .params { grid-template-columns: 1fr; }
+    .pagination { gap: 2px; flex-wrap: wrap; }
+    .page-btn { min-width: 30px; height: 30px; font-size: 12px; }
+  }
+
 </style>
 </head>
 <body>
@@ -539,7 +845,7 @@
   <div class="card">
     <div class="card-title">📈 趋势图 <span style="font-size:11px;color:rgba(255,255,255,0.2);font-weight:400;text-transform:none">— 按日聚合平均值</span></div>
     <div style="margin-bottom:12px">
-      <select id="chartParamSelect" style="width:100%;padding:10px 14px;border-radius:10px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.06);color:#fff;font-size:14px;outline:none;appearance:auto;-webkit-appearance:auto;">
+      <select id="chartParamSelect" style="width:100%;padding:10px 14px;border-radius:10px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.04);color:#fff;font-size:14px;outline:none;">
         <option value="" disabled selected style="color:rgba(255,255,255,0.3)">选择参数查看趋势...</option>
       </select>
     </div>
@@ -682,6 +988,8 @@
   let editingRecordIndex = -1;       // -1 = creating new, >=0 = updating existing record
   let expandedRecordIndex = -1;      // which record's detail panel is open
   let searchQuery = '';
+  let currentPage = 1;
+  const PAGE_SIZE = 10;
 
   const toast = document.getElementById('toast');
   const imageInput = document.getElementById('imageInput');
@@ -822,16 +1130,48 @@
     valEl.innerHTML = `${current}<span class="param-unit">${p.unit}</span>`;
   }
 
+  function renderPagination(totalPages) {
+    const el = document.getElementById('pagination');
+    if (!el || totalPages <= 1) { if (el) el.innerHTML = ''; return; }
+    let html = '';
+    html += `<button class="page-btn" onclick="goToPage(${currentPage - 1})" ${currentPage <= 1 ? 'disabled' : ''}>‹</button>`;
+    const range = 2;
+    for (let i = Math.max(1, currentPage - range); i <= Math.min(totalPages, currentPage + range); i++) {
+      if (i === currentPage) html += `<span class="page-btn active">${i}</span>`;
+      else html += `<button class="page-btn" onclick="goToPage(${i})">${i}</button>`;
+    }
+    html += `<button class="page-btn" onclick="goToPage(${currentPage + 1})" ${currentPage >= totalPages ? 'disabled' : ''}>›</button>`;
+    html += `<span class="page-info">${currentPage}/${totalPages}</span>`;
+    el.innerHTML = html;
+  }
+
+  function goToPage(page) {
+    const filtered = searchQuery
+      ? records.filter(r => {
+          const q = searchQuery.toLowerCase();
+          if (r.savedAt && r.savedAt.toLowerCase().includes(q)) return true;
+          return PARAMS.some(p => {
+            const v = r[p.key];
+            return v !== null && v !== undefined && v !== '' && String(v).toLowerCase().includes(q);
+          });
+        })
+      : records;
+    const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+    currentPage = Math.max(1, Math.min(page, totalPages));
+    renderRecords();
+    bindRecordEvents();
+  }
+
   function renderRecords() {
     if (records.length === 0) {
-      recordsList.innerHTML = '<div style="text-align:center;padding:20px;color:rgba(255,255,255,0.2);font-size:13px">暂无记录</div>';
+      recordsList.innerHTML = '<div style="text-align:center;padding:24px;color:rgba(255,255,255,0.2);font-size:13px">暂无记录</div>';
       clearBtn.style.display = 'none';
       searchBar.style.display = 'none';
       recordCount2.textContent = '';
+      renderPagination(0);
       return;
     }
     clearBtn.style.display = 'block';
-    recordCount2.textContent = `共 ${records.length} 条`;
 
     const filtered = searchQuery
       ? records.filter(r => {
@@ -845,20 +1185,28 @@
       : records;
 
     searchBar.style.display = 'block';
+    recordCount2.textContent = `共 ${records.length} 条`;
     searchResultCount.textContent = searchQuery ? `筛选 ${filtered.length}/${records.length}` : '';
 
+    const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+    if (currentPage > totalPages) currentPage = totalPages;
+    renderPagination(totalPages);
+
     if (filtered.length === 0) {
-      recordsList.innerHTML = `<div style="text-align:center;padding:20px;color:rgba(255,255,255,0.2);font-size:13px">无匹配记录</div>`;
+      recordsList.innerHTML = `<div style="text-align:center;padding:24px;color:rgba(255,255,255,0.2);font-size:13px">无匹配记录</div>`;
       return;
     }
 
-    // Show latest first
-    const display = filtered.slice().reverse();
+    // Show latest first, slice for current page
+    const sorted = filtered.slice().reverse();
+    const start = (currentPage - 1) * PAGE_SIZE;
+    const pageItems = sorted.slice(start, start + PAGE_SIZE);
 
-    recordsList.innerHTML = display.map((r, displayIdx) => {
+    recordsList.innerHTML = pageItems.map((r, displayIdx) => {
       const actualIdx = records.indexOf(r);
       const isOpen = expandedRecordIndex === actualIdx;
       const isEditing = editingRecordIndex === actualIdx;
+      const globalIdx = start + displayIdx; // display index across all pages
 
       // Summary line: show first 3 non-empty values
       const summaryVals = PARAMS.map(p => {
@@ -869,7 +1217,7 @@
 
       return `<div class="record-item-wrapper ${isEditing ? 'editing' : ''}">
         <div class="record-item" data-idx="${actualIdx}">
-          <span class="idx">#${records.length - displayIdx}</span>
+          <span class="idx">#${records.length - globalIdx}</span>
           <span class="time">${r.savedAt || '--'}</span>
           <span class="vals"><span>${summaryVals || '(空)'}${summaryVals && PARAMS.some(p => r[p.key] !== null && r[p.key] !== undefined && r[p.key] !== '') ? ' …' : ''}</span></span>
           <span class="record-actions">
@@ -890,16 +1238,14 @@
               return `<div class="item"><span>${p.label}</span><span class="v">${val || '--'} ${val ? p.unit : ''}</span></div>`;
             })}
           </div>
-          ${isEditing
-            ? `<div class="edit-actions">
-                <button class="save-edit" data-idx="${actualIdx}">💾 保存修改</button>
-                <button class="cancel-edit" data-idx="${actualIdx}">取消</button>
-              </div>`
-            : `<div class="edit-actions" style="margin-top:6px">
-                <button class="load-to-dash" data-idx="${actualIdx}" style="background:rgba(102,126,234,0.15);color:#8ea4f0">📋 加载到仪表盘</button>
-              </div>`}
-        </div>
-      </div>`;
+          <div class="edit-actions" style="${isEditing ? '' : 'margin-top:10px'}">
+            ${isEditing
+              ? `<button class="save-edit" data-idx="${actualIdx}">💾 保存修改</button>
+                 <button class="cancel-edit" data-idx="${actualIdx}">取消</button>`
+              : `<button class="load-to-dash-btn" data-idx="${actualIdx}">📋 加载到仪表盘</button>`}
+          </div>
+              </div>
+            </div>`;
     }).join('');
 
     // Bind event listeners for record actions (use event delegation on recordsList)
