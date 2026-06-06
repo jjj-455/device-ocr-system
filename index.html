@@ -557,51 +557,44 @@
     { key: 'tempOut',        label: '温度(输出回路)',    unit: '°C',    thresholds: { warn: [20, 50], alert: [15, 55] } }
   ];
 
-  // ---- IndexedDB storage (large capacity for records with images) ----
-  const DB_NAME = 'cooling_monitor_db';
-  const DB_VERSION = 1;
-  function openDB() {
-    return new Promise((resolve, reject) => {
-      const req = indexedDB.open(DB_NAME, DB_VERSION);
-      req.onupgradeneeded = (e) => {
-        const db = e.target.result;
-        if (!db.objectStoreNames.contains('kv')) {
-          db.createObjectStore('kv', { keyPath: 'key' });
-        }
-      };
-      req.onsuccess = (e) => resolve(e.target.result);
-      req.onerror = (e) => reject(e.target.error);
-    });
+  // ---- Server API (cross-device records storage) ----
+  const RECORDS_API = '/api/records';
+
+  async function apiGetRecords() {
+    const res = await fetch(RECORDS_API);
+    if (!res.ok) throw new Error(`加载记录失败: ${res.status}`);
+    return await res.json();
   }
-  async function dbGet(key) {
-    const db = await openDB();
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction('kv', 'readonly');
-      const req = tx.objectStore('kv').get(key);
-      req.onsuccess = () => resolve(req.result ? req.result.value : null);
-      req.onerror = (e) => reject(e.target.error);
-      tx.oncomplete = () => db.close();
+
+  async function apiCreateRecord(data) {
+    const res = await fetch(RECORDS_API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
     });
+    if (!res.ok) throw new Error(`保存失败: ${res.status}`);
+    return await res.json();
   }
-  async function dbSet(key, value) {
-    const db = await openDB();
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction('kv', 'readwrite');
-      tx.objectStore('kv').put({ key, value });
-      tx.oncomplete = () => { db.close(); resolve(); };
-      tx.onerror = (e) => reject(e.target.error);
+
+  async function apiUpdateRecord(id, data) {
+    const res = await fetch(`${RECORDS_API}/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
     });
+    if (!res.ok) throw new Error(`更新失败: ${res.status}`);
   }
-  async function dbDel(key) {
-    const db = await openDB();
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction('kv', 'readwrite');
-      tx.objectStore('kv').delete(key);
-      tx.oncomplete = () => { db.close(); resolve(); };
-      tx.onerror = (e) => reject(e.target.error);
-    });
+
+  async function apiDeleteRecord(id) {
+    const res = await fetch(`${RECORDS_API}/${id}`, { method: 'DELETE' });
+    if (!res.ok) throw new Error(`删除失败: ${res.status}`);
   }
-  // ---- end IndexedDB ----
+
+  async function apiClearRecords() {
+    const res = await fetch(RECORDS_API, { method: 'DELETE' });
+    if (!res.ok) throw new Error(`清除失败: ${res.status}`);
+  }
+  // ---- end Server API ----
 
   let latestData = JSON.parse(localStorage.getItem('cooling_latest') || 'null');
   let records = [];
@@ -647,14 +640,8 @@
   const weekdays = ['日','一','二','三','四','五','六'];
   dateDisplay.textContent = `${now.getFullYear()}年${now.getMonth()+1}月${now.getDate()}日 星期${weekdays[now.getDay()]}`;
 
-  let _savePromise = Promise.resolve();
-  function save() {
-    localStorage.setItem('cooling_latest', JSON.stringify(latestData));
-    // Serialized async write to IndexedDB (fire-and-forget but queued)
-    _savePromise = _savePromise.then(() => dbSet('cooling_records', records)).catch(e => {
-      console.error('IndexedDB save failed:', e);
-      showToast('存储空间不足，请清理旧记录');
-    });
+  function saveDash() {
+    try { localStorage.setItem('cooling_latest', JSON.stringify(latestData)); } catch(e) {}
   }
 
   function showToast(msg) {
@@ -744,7 +731,7 @@
     latestData[p.key] = val;
     const now = new Date();
     latestData.savedAt = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
-    save();
+    saveDash();
     updateDashboard();
   }
 
@@ -897,7 +884,7 @@
           pendingImage = null;
           imgPreview.classList.remove('show');
         }
-        save();
+        saveDash();
         updateDashboard();
         editingRecordIndex = idx;  // Set to update mode
         expandedRecordIndex = -1;
@@ -926,11 +913,15 @@
     searchInput.value = searchQuery;
   }
 
-  function deleteRecord(idx) {
+  async function deleteRecord(idx) {
     if (!recordsReady) { showToast('正在加载数据，请稍后...'); return; }
     const r = records[idx];
     if (!r) return;
     if (!confirm(`确认删除 ${r.savedAt || '--'} 这条记录？`)) return;
+    // Delete from server first
+    if (r._serverId) {
+      try { await apiDeleteRecord(r._serverId); } catch (e) { showToast('删除失败: ' + e.message); return; }
+    }
     records.splice(idx, 1);
     if (editingRecordIndex === idx) editingRecordIndex = -1;
     if (expandedRecordIndex === idx) expandedRecordIndex = -1;
@@ -941,8 +932,8 @@
       latestData = null;
       pendingImage = null;
       imgPreview.classList.remove('show');
+      saveDash();
     }
-    save();
     renderRecords();
     bindRecordEvents();
     updateDashboard();
@@ -977,7 +968,7 @@
     searchInput.value = searchQuery;
   }
 
-  function saveRecordEdit(idx) {
+  async function saveRecordEdit(idx) {
     const r = records[idx];
     if (!r) return;
     const wrapper = document.querySelector(`.record-item-wrapper.editing`);
@@ -999,7 +990,11 @@
       }
       // Sync dashboard to reflect changes (including the image)
       latestData = { ...r };
-      save();
+      saveDash();
+      // Update server
+      if (r._serverId) {
+        try { await apiUpdateRecord(r._serverId, r); } catch (e) { showToast('更新失败: ' + e.message); return; }
+      }
       updateDashboard();
       showToast('已更新');
     } else {
@@ -1200,13 +1195,23 @@
     reader.readAsArrayBuffer(file);
   }
 
-  function confirmImportAction() {
+  async function confirmImportAction() {
     if (_pendingImportRecords.length === 0) return;
+    showToast('正在导入到服务器...');
+    // Upload each record to server
+    for (const r of _pendingImportRecords) {
+      try {
+        const result = await apiCreateRecord(r);
+        r._serverId = result.id;
+      } catch (e) {
+        showToast('导入部分失败: ' + e.message);
+        break;
+      }
+    }
     records.push(..._pendingImportRecords);
     if (records.length > 2000) records = records.slice(-2000);
     _pendingImportRecords = [];
     importSummary.classList.remove('show');
-    save();
     renderRecords();
     bindRecordEvents();
     updateDashboard();
@@ -1273,7 +1278,7 @@
       // Save image to latestData for persistence in records
       if (!latestData) latestData = { savedAt: '', ...Object.fromEntries(PARAMS.map(p => [p.key, ''])) };
       latestData._img = pendingImage;
-      save();
+      saveDash();
     };
     reader.readAsDataURL(file);
     e.target.value = '';
@@ -1282,7 +1287,7 @@
   removeImgBtn.addEventListener('click', () => {
     pendingImage = null;
     imgPreview.classList.remove('show');
-    if (latestData) { delete latestData._img; save(); }
+    if (latestData) { delete latestData._img; saveDash(); }
   });
 
   analyzeBtn.addEventListener('click', async () => {
@@ -1356,7 +1361,7 @@
       if (!latestData) latestData = { savedAt: '', ...Object.fromEntries(PARAMS.map(p => [p.key, ''])) };
       Object.assign(latestData, extracted);
       latestData.savedAt = timeStr;
-      save();
+      saveDash();
       updateDashboard();
 
     } catch (err) {
@@ -1372,7 +1377,7 @@
     }
   });
 
-  saveBtn.addEventListener('click', () => {
+  saveBtn.addEventListener('click', async () => {
     if (!recordsReady) { showToast('正在加载数据，请稍后...'); return; }
     if (!latestData) {
       showToast('暂无数据，请先上传图片');
@@ -1390,32 +1395,47 @@
 
     if (editingRecordIndex >= 0 && editingRecordIndex < records.length) {
       // Update existing record
-      records[editingRecordIndex] = { ...latestData };
+      const r = records[editingRecordIndex];
+      Object.assign(r, latestData);
+      // Update server
+      if (r._serverId) {
+        try { await apiUpdateRecord(r._serverId, r); } catch (e) { showToast('更新失败: ' + e.message); return; }
+      }
       editingRecordIndex = -1;
       showToast('记录已更新');
     } else {
-      // Create new record
-      records.push({ ...latestData });
+      // Create new record (upload to server first)
+      const recordData = { ...latestData };
+      try {
+        const result = await apiCreateRecord(recordData);
+        recordData._serverId = result.id;
+      } catch (e) {
+        showToast('保存失败: ' + e.message);
+        return;
+      }
+      records.push(recordData);
       if (records.length > 2000) records = records.slice(-2000);
       showToast('记录已保存');
     }
-    save();
+    saveDash();
     updateDashboard();
     renderRecords();
     bindRecordEvents();
     searchInput.value = searchQuery;
   });
 
-  clearBtn.addEventListener('click', () => {
+  clearBtn.addEventListener('click', async () => {
     if (!recordsReady) { showToast('正在加载数据，请稍后...'); return; }
     if (!confirm('确认清除所有历史记录？')) return;
+    // Clear server records
+    try { await apiClearRecords(); } catch (e) { showToast('清除失败: ' + e.message); return; }
     records = [];
     editingRecordIndex = -1;
     expandedRecordIndex = -1;
     latestData = null;
     pendingImage = null;
     imgPreview.classList.remove('show');
-    save();
+    saveDash();
     renderRecords();
     bindRecordEvents();
     updateDashboard();
@@ -1446,31 +1466,71 @@
     if (count === 0) { showToast('请至少输入一项数值'); return; }
     const now = new Date();
     latestData.savedAt = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
-    save();
+    saveDash();
     updateDashboard();
     showToast(`已应用 ${count} 项`);
   });
 
-  // ---- Async initialization: load records from IndexedDB ----
+  // ---- Async initialization: load records from server API ----
   (async function init() {
     try {
-      const stored = await dbGet('cooling_records');
-      if (Array.isArray(stored)) records = stored;
-      else records = [];
+      // 1. Try loading from server (primary)
+      const serverRecords = await apiGetRecords();
+      if (Array.isArray(serverRecords) && serverRecords.length > 0) {
+        records = serverRecords;
+        recordsReady = true;
+        updateDashboard();
+        renderRecords();
+        bindRecordEvents();
+        return;
+      }
     } catch (e) {
-      console.warn('IndexedDB load failed, starting empty:', e);
-      records = [];
+      console.warn('Server unavailable, will try offline storage:', e);
     }
 
-    // Migrate old localStorage records if IndexedDB was empty
-    if (records.length === 0) {
+    // 2. Offline fallback: migrate old records from IndexedDB / localStorage
+    try {
+      // Try IndexedDB (old primary storage pre-v1.1)
+      const stored = await new Promise((resolve) => {
+        const req = indexedDB.open('cooling_monitor_db');
+        req.onsuccess = (e) => {
+          const db = e.target.result;
+          try {
+            const tx = db.transaction('kv', 'readonly');
+            const r = tx.objectStore('kv').get('cooling_records');
+            r.onsuccess = () => resolve(r.result ? r.result.value : null);
+            r.onerror = () => resolve(null);
+            tx.oncomplete = () => db.close();
+          } catch(ex) { db.close(); resolve(null); }
+        };
+        req.onerror = () => resolve(null);
+      });
+      if (Array.isArray(stored) && stored.length > 0) {
+        // Upload to server
+        for (const r of stored) {
+          try { const result = await apiCreateRecord(r); r._serverId = result.id; } catch(e) {}
+        }
+        records = stored;
+        localStorage.setItem('cooling_records', '[]');
+        recordsReady = true;
+        updateDashboard();
+        renderRecords();
+        bindRecordEvents();
+        return;
+      }
+    } catch (e) { /* IndexedDB unavailable */ }
+
+    // 3. Try old localStorage records as last resort
+    try {
       const legacy = JSON.parse(localStorage.getItem('cooling_records') || '[]');
       if (Array.isArray(legacy) && legacy.length > 0) {
+        for (const r of legacy) {
+          try { const result = await apiCreateRecord(r); r._serverId = result.id; } catch(e) {}
+        }
         records = legacy;
-        save(); // persist to IndexedDB
-        localStorage.removeItem('cooling_records'); // cleanup old key
+        localStorage.removeItem('cooling_records');
       }
-    }
+    } catch(e) {}
 
     recordsReady = true;
     updateDashboard();
