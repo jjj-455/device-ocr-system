@@ -988,12 +988,12 @@
     } else {
       editingRecordIndex = idx;
       expandedRecordIndex = idx;
-      // Sync dashboard to this record so image handling is consistent
-      latestData = { ...r };
-      // Load image if needed
+      // Load image FIRST before populating dashboard
       if (!r._img && r._serverId) {
         await ensureImage(r);
       }
+      // Sync dashboard to this record
+      latestData = { ...r };
       // Also restore image preview if the record has one
       if (r._img) {
         pendingImage = r._img;
@@ -1071,9 +1071,18 @@
     { key: '_hasPhoto',  label: '照片' },
   ];
 
-  function exportToExcel() {
+  async function exportToExcel() {
     if (!recordsReady) { showToast('正在加载数据，请稍后...'); return; }
     if (records.length === 0) { showToast('暂无记录可导出'); return; }
+
+    // Ensure images are loaded for records that have them on server
+    const needImage = records.filter(r => r._serverId && !r._img);
+    if (needImage.length > 0) {
+      showToast(`正在加载 ${needImage.length} 张照片...`);
+      for (const r of needImage) {
+        await ensureImage(r);
+      }
+    }
 
     try {
       const now = new Date();
